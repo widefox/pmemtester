@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # EDAC (Error Detection and Correction) monitoring for pmemtester
 # Checks dmesg messages and sysfs counters for hardware memory errors.
 

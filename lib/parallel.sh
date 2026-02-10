@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # Parallel memtester execution engine
 # Requires: logging.sh
 

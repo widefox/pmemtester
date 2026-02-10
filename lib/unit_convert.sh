@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # Unit conversion utilities for pmemtester
 # All values are integers. Conversions use floor division (truncation).
 

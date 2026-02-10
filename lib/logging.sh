@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # Logging utilities for pmemtester
 # Provides per-thread logs and an aggregated master log.
 

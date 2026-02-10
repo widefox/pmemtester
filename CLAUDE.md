@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
+**Repository:** https://github.com/widefox/pmemtester
+
 pmemtester is a parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) written in pure Bash. It runs multiple memtester instances in parallel (one per CPU thread), divides RAM equally among them, and validates results using both memtester exit codes and Linux EDAC hardware error detection.
 
 ## Development Methodology

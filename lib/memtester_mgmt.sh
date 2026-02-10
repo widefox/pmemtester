@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # Memtester binary discovery and validation
 
 # find_memtester: locate the memtester binary

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # CLI argument parsing for pmemtester
 
 # Defaults (globals consumed by main script)

@@ -1,6 +1,10 @@
 # pmemtester
 
+[![License: GPL-2.0-only](https://img.shields.io/badge/License-GPL--2.0--only-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
+
 A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) -- the quickest way to stress-test RAM on Linux. Safe to run on any host with default settings.
+
+**Repository:** https://github.com/widefox/pmemtester
 
 ## Features
 
@@ -243,4 +247,4 @@ make dist              # Create .tgz distribution archive
 
 ## License
 
-GPLv2
+[GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)

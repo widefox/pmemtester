@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # Integer arithmetic utilities for pmemtester
 # All operations are integer-only; no floating point.
 

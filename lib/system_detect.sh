@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # System detection utilities for pmemtester
 # Reads RAM info from /proc/meminfo and thread count from nproc.
 

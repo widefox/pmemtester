@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # Kernel memory lock management for pmemtester
 # memtester requires mlock(), which needs sufficient ulimit -l.
 
@@ -6,7 +7,9 @@
 # Override via MOCK_ULIMIT_L env var for integration tests
 _read_ulimit_l() { echo "${MOCK_ULIMIT_L:-$(ulimit -l)}"; }
 _set_ulimit_l() {
-    if [[ -n "${MOCK_ULIMIT_L:-}" ]]; then return 0; fi
+    if [[ -n "${MOCK_ULIMIT_L:-}" ]]; then
+	return 0
+    fi
     ulimit -l "$1"
 }
 

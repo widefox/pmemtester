@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
 # RAM calculation for pmemtester
 # Determines how much RAM to test and how to divide it among threads.
 # Requires: math_utils.sh, unit_convert.sh, system_detect.sh
