@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# pmemtester - Parallel wrapper for memtester
+# Version: 0.1
+# Author: Johnathon Weare <jrweare@gmail.com>
+# License: GPLv2
+
+set -euo pipefail
+
+# shellcheck disable=SC2034
+PMEMTESTER_VERSION="0.1"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+for lib in "${SCRIPT_DIR}"/lib/*.sh; do source "$lib"; done
+
+main() {
+    parse_args "$@"
+    validate_args
+
+    local memtester_path
+    memtester_path="$(find_memtester "$MEMTESTER_DIR")"
+    validate_memtester "$memtester_path"
+
+    local ram_kb thread_count ram_per_thread_mb
+    ram_kb="$(calculate_test_ram_kb "$PERCENT" "$RAM_TYPE")"
+    thread_count="$(get_thread_count)"
+    ram_per_thread_mb="$(divide_ram_per_thread_mb "$ram_kb" "$thread_count")"
+    validate_ram_params "$PERCENT" "$thread_count" "$ram_per_thread_mb"
+
+    local size_arg
+    size_arg="$(mb_to_memtester_arg "$ram_per_thread_mb")"
+
+    check_memlock_sufficient "$ram_kb" || configure_memlock "$ram_kb"
+
+    local log_dir="${LOG_DIR:-/tmp/pmemtester.$$}"
+    init_logs "$log_dir" "$thread_count"
+
+    log_master "Starting pmemtester: ${ram_per_thread_mb}MB x ${thread_count} threads" "$log_dir"
+
+    # EDAC before
+    local edac_supported=0
+    if check_edac_supported 2>/dev/null; then
+        edac_supported=1
+        capture_edac_messages > "${log_dir}/edac_messages_before.txt"
+        capture_edac_counters > "${log_dir}/edac_counters_before.txt"
+    fi
+
+    # Run memtesters
+    run_all_memtesters "$memtester_path" "$size_arg" "$ITERATIONS" "$thread_count" "$log_dir"
+    local memtester_result=0
+    wait_and_collect "$log_dir" || memtester_result=1
+
+    # EDAC after
+    local edac_result=0
+    if [[ "$edac_supported" -eq 1 ]]; then
+        capture_edac_messages > "${log_dir}/edac_messages_after.txt"
+        capture_edac_counters > "${log_dir}/edac_counters_after.txt"
+        compare_edac_messages "${log_dir}/edac_messages_before.txt" "${log_dir}/edac_messages_after.txt" || edac_result=1
+        compare_edac_counters "${log_dir}/edac_counters_before.txt" "${log_dir}/edac_counters_after.txt" || edac_result=1
+    fi
+
+    aggregate_logs "$log_dir" "$thread_count"
+
+    # Final verdict
+    if [[ "$memtester_result" -eq 0 ]] && [[ "$edac_result" -eq 0 ]]; then
+        log_master "PASS: All memtesters passed, no EDAC errors" "$log_dir"
+        echo "PASS"
+        return 0
+    else
+        log_master "FAIL: memtester_result=${memtester_result} edac_result=${edac_result}" "$log_dir"
+        echo "FAIL"
+        return 1
+    fi
+}
+
+main "$@"

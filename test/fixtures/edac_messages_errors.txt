@@ -1,0 +1,5 @@
+EDAC MC: Ver: 3.0.0
+EDAC MC0: Giving out device to module_name controller
+EDAC PCI0000:00: Giving out device to module_name controller
+EDAC MC0: 1 CE error on csrow0 channel0
+EDAC MC0: grain:8 row:0 channel:0 label:"": page:0x1234 offset:0x0 syndrome:0x0
