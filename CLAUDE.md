@@ -46,18 +46,20 @@ make coverage
 
 ### Source Layout
 
-- `pmemtester` — Main executable (thin orchestrator that sources all libs)
-- `lib/*.sh` — Function libraries, each focused on one concern:
-  - `math_utils.sh` — Integer arithmetic (`ceiling_div`, `percentage_of`, `safe_multiply`)
-  - `unit_convert.sh` — kB/MB/bytes conversions
-  - `system_detect.sh` — RAM and thread count detection from `/proc/meminfo` and `nproc`
-  - `memtester_mgmt.sh` — Find and validate memtester binary
-  - `memlock.sh` — Kernel memory lock limit checking and configuration
-  - `edac.sh` — EDAC message/counter capture and comparison via dmesg and sysfs
-  - `ram_calc.sh` — RAM allocation math (percentage, per-thread division, validation)
-  - `parallel.sh` — Background memtester launch, PID tracking, wait-and-collect
-  - `logging.sh` — Per-thread and master log management
-  - `cli.sh` — Argument parsing and validation
+```tree
+pmemtester                  # Main executable (thin orchestrator)
+lib/
+├── math_utils.sh           # Integer arithmetic (ceiling_div, percentage_of, safe_multiply)
+├── unit_convert.sh         # kB/MB/bytes conversions
+├── system_detect.sh        # RAM and thread count from /proc/meminfo and nproc
+├── memtester_mgmt.sh       # Find and validate memtester binary
+├── memlock.sh              # Kernel memory lock limit checking and configuration
+├── edac.sh                 # EDAC message/counter capture and comparison
+├── ram_calc.sh             # RAM allocation math (percentage, per-thread division)
+├── parallel.sh             # Background memtester launch, PID tracking, wait
+├── logging.sh              # Per-thread and master log management
+└── cli.sh                  # Argument parsing and validation
+```
 
 ### Main Execution Flow
 

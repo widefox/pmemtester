@@ -23,7 +23,7 @@ dist:
 	@mkdir -p dist
 	tar czf dist/$(NAME)-$(VERSION).tgz \
 		--transform='s,^,$(NAME)-$(VERSION)/,' \
-		pmemtester lib/ Makefile README.md CLAUDE.md
+		pmemtester lib/ Makefile README.md PROMPT.md CLAUDE.md
 	@echo "Created dist/$(NAME)-$(VERSION).tgz"
 
 install:
