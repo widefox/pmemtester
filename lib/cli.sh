@@ -53,7 +53,7 @@ validate_args() {
         return 1
     fi
     case "$RAM_TYPE" in
-        available|total|free) ;;
+        available|total|free) : ;;
         *)
             echo "ERROR: --ram-type must be available, total, or free (got ${RAM_TYPE})" >&2
             return 1

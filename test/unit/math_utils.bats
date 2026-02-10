@@ -136,6 +136,12 @@ setup() {
     assert_output "5"
 }
 
+@test "max_val returns larger (second)" {
+    run max_val 3 5
+    assert_success
+    assert_output "5"
+}
+
 @test "max_val equal values" {
     run max_val 5 5
     assert_success

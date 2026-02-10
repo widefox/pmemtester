@@ -85,8 +85,27 @@ setup() {
     assert_failure
 }
 
+@test "validate_args iterations zero fails" {
+    PERCENT=90 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=0
+    run validate_args
+    assert_failure
+    assert_output --partial "iterations"
+}
+
 @test "validate_args valid defaults passes" {
     PERCENT=90 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=1
+    run validate_args
+    assert_success
+}
+
+@test "validate_args valid ram-type total passes" {
+    PERCENT=90 RAM_TYPE=total MEMTESTER_DIR=/usr/local/bin ITERATIONS=1
+    run validate_args
+    assert_success
+}
+
+@test "validate_args valid ram-type free passes" {
+    PERCENT=90 RAM_TYPE=free MEMTESTER_DIR=/usr/local/bin ITERATIONS=1
     run validate_args
     assert_success
 }

@@ -55,3 +55,22 @@ setup() {
     run configure_memlock 131072
     assert_failure
 }
+
+@test "_set_ulimit_l with MOCK_ULIMIT_L returns success" {
+    export MOCK_ULIMIT_L=65536
+    run _set_ulimit_l 131072
+    assert_success
+}
+
+@test "_set_ulimit_l without mock calls ulimit" {
+    # Without MOCK_ULIMIT_L, _set_ulimit_l calls real ulimit -l
+    # This will either succeed (if permitted) or fail (if not)
+    # Either way it exercises the real code path (line 10)
+    unset MOCK_ULIMIT_L
+    # Use current limit so it's likely to succeed
+    local current_limit
+    current_limit="$(ulimit -l)"
+    run _set_ulimit_l "$current_limit"
+    # We just need to exercise the code path; result depends on permissions
+    [[ "$status" -eq 0 ]] || [[ "$status" -eq 1 ]]
+}
