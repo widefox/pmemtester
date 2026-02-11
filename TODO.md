@@ -71,6 +71,18 @@ pmemtester uses `nproc` which returns the number of hardware threads (including 
 - More threads with smaller allocations may actually improve test coverage by exercising more memory controller interleaving patterns
 - Document this trade-off and consider an optional `--threads N` override for users who want explicit control
 
+## Time Estimation
+
+Run a short calibration test at the start of every run to estimate completion time:
+
+- Before the main test, run memtester on a small sample (e.g., 0.1% of the requested RAM per thread) with logging disabled
+- Measure wall-clock time for the sample, then linearly scale to the full requested amount
+- Display the estimate before starting the real test (e.g., "Estimated completion: ~45 minutes")
+- memtester runtime scales roughly linearly with RAM size for a given iteration count, so naive scaling should be reasonable
+- Run by default (`--no-estimate` to skip), so users always see a time estimate upfront
+- The calibration run also serves as a quick sanity check that memtester works before committing to a long run
+- Consider caching calibration results per-host (MB/s throughput) to skip the sample on subsequent runs
+
 ## FAQ
 
 Add a FAQ section to the README. Candidate questions:
