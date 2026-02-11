@@ -1,3 +1,14 @@
 dist/
 coverage/
 test/tmp/
+
+# Tags
+TAGS
+GPATH
+GRTAGS
+GTAGS
+
+# Emacs
+*~
+\#*\#
+.#*

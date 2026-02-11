@@ -13,8 +13,8 @@ ITERATIONS=1
 
 # usage: print help text
 usage() {
-    cat <<'EOF'
-Usage: pmemtester [OPTIONS]
+    cat <<EOF
+Usage: pmemtester ${pmemtester_version:-unknown} [OPTIONS]
 
 Options:
   --percent N         Percentage of RAM to test (1-100, default: 90)
@@ -37,7 +37,7 @@ parse_args() {
             --memtester-dir) MEMTESTER_DIR="$2"; shift 2 ;;
             --log-dir)    LOG_DIR="$2"; shift 2 ;;
             --iterations) ITERATIONS="$2"; shift 2 ;;
-            --version)    echo "pmemtester ${PMEMTESTER_VERSION:-unknown}"; exit 0 ;;
+            --version)    echo "pmemtester ${pmemtester_version:-unknown}"; exit 0 ;;
             --help)       usage; exit 0 ;;
             *)
                 echo "ERROR: unknown option: $1" >&2

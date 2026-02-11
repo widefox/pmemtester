@@ -245,6 +245,49 @@ make dist              # Create .tgz distribution archive
 - EDAC support (optional -- gracefully skipped if absent)
 - For testing: bats 1.13.0+, kcov 35+, shellcheck 0.10.0+
 
+## EDAC Compatibility
+
+pmemtester optionally checks Linux [EDAC](https://docs.kernel.org/driver-api/edac.html) (Error Detection and Correction) hardware error counters before and after the memory test. **ECC RAM is required** for EDAC to report anything -- on non-ECC systems the EDAC driver detects no ECC capability and does not load, so pmemtester gracefully skips the check.
+
+Nearly all major distros enable `CONFIG_EDAC=y` (built-in) with hardware drivers as loadable modules:
+
+| Distro | EDAC Enabled | Notes |
+|--------|-------------|-------|
+| RHEL 8/9/10 | Yes | Full support |
+| Rocky / AlmaLinux 9 | Yes | Mirrors RHEL |
+| Fedora | Yes | Full driver set |
+| Ubuntu 22.04/24.04 | Yes | Cloud kernels may differ |
+| Debian 12 | Yes | Cloud kernel disables EDAC |
+| SLES / openSUSE | Yes | Full server-grade support |
+| Arch Linux | Yes | Loads even on desktop hardware |
+| Gentoo | Manual | User must enable in kernel config |
+
+### Architecture Support
+
+EDAC is available on most Linux-supported architectures, though driver coverage varies:
+
+| Architecture | EDAC Support | Drivers |
+|---|---|---|
+| x86 / x86_64 | Yes | ~25 drivers: Intel (440BX through Ice Lake+), AMD (K8 through Zen 6) |
+| ARM64 / AArch64 | Yes | ThunderX, X-Gene, BlueField, Qualcomm LLCC, DMC-520, Cortex-A72 |
+| ARM (32-bit) | Yes | Calxeda, Altera SOCFPGA, Armada XP, Aspeed BMC, TI |
+| PowerPC | Yes | IBM CPC925, Cell BE, PA Semi, Freescale MPC85xx |
+| RISC-V | Yes | SiFive CCACHE only |
+| LoongArch | Yes | Loongson 3A5000/3A6000 family |
+| MIPS | Partial | Cavium Octeon only |
+| s390 | No | Uses hypervisor/firmware RAS instead |
+
+The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with UEFI firmware support, providing a uniform EDAC sysfs interface regardless of the specific memory controller.
+
+**Known considerations:**
+- On ACPI/APEI systems, the GHES firmware-first driver may take priority over OS-level EDAC drivers
+- Real-time kernels and some server vendors (HPE ProLiant) recommend disabling EDAC in favor of firmware-based error reporting (iLO/iDRAC)
+- If EDAC sysfs is absent (`/sys/devices/system/edac/mc/` empty or missing), pmemtester skips EDAC checks and reports results based on memtester exit codes alone
+
+## Roadmap
+
+See [TODO.md](TODO.md) for planned improvements including EDAC error classification (CE vs UE) and multi-architecture validation.
+
 ## License
 
 [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
