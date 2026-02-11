@@ -34,7 +34,7 @@ check_memlock_sufficient() {
     if [[ "$limit_kb" -ge "$needed_kb" ]]; then
         return 0
     fi
-    echo "ERROR: memlock limit ${limit_kb} kB < needed ${needed_kb} kB" >&2
+    echo "INFO: memlock limit ${limit_kb} kB < needed ${needed_kb} kB" >&2
     return 1
 }
 
