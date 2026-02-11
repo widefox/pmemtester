@@ -48,6 +48,41 @@ Options:
   --help              Show this help message
 ```
 
+## Use Cases
+
+### Maximum RAM coverage
+
+To test as much RAM as possible, use `--percent 95` with available RAM (the default):
+
+```bash
+sudo pmemtester --percent 95
+```
+
+Using 100% is not safe -- pmemtester itself, the shell, and the OS kernel need some working memory. The `available` RAM type (from `/proc/meminfo` `MemAvailable`) already excludes memory used by the kernel and page cache, so 95% of available is aggressive but leaves enough headroom (~200-500MB on a typical server) for the OS and pmemtester processes to function without triggering the OOM killer.
+
+| Percent | Risk | Use case |
+|---------|------|----------|
+| 90% (default) | Safe | Routine testing, production-adjacent hosts |
+| 95% | Low risk | Thorough pre-deployment validation |
+| 98% | Moderate | Dedicated test hosts with minimal services |
+| 100% | OOM likely | Not recommended -- OS needs working memory |
+
+### Single-socket testing on a multi-socket server
+
+On a running multi-socket server, you may want to test one NUMA node at a time to maintain partial availability. pmemtester doesn't currently have built-in NUMA support, but you can use `numactl` to constrain it to a single socket:
+
+```bash
+# Test socket 0 only (CPUs and memory bound to NUMA node 0)
+sudo numactl --cpunodebind=0 --membind=0 pmemtester --percent 90
+
+# Test socket 1 only
+sudo numactl --cpunodebind=1 --membind=1 pmemtester --percent 90
+```
+
+This binds both the CPU threads and memory allocation to the specified NUMA node, so only that socket's RAM is tested. The other socket remains fully available for workloads.
+
+**Note:** `--percent 90` in this case applies to the available memory on that NUMA node, not the whole system. Check per-node memory with `numactl --hardware`.
+
 ## Source Layout
 
 ```tree
@@ -208,7 +243,7 @@ In this case all memtester processes passed, but 3 correctable ECC errors (ce_co
 
 ## Execution Flow
 
-```text
+```workflow
 parse_args --> validate_args --> find_memtester --> calculate_test_ram_kb
     --> get_thread_count --> divide_ram_per_thread_mb --> check_memlock_sufficient
     --> init_logs --> [EDAC before] --> run_all_memtesters --> wait_and_collect
@@ -286,7 +321,7 @@ The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with
 
 ## Roadmap
 
-See [TODO.md](TODO.md) for planned improvements including EDAC error classification (CE vs UE) and multi-architecture validation.
+See [TODO.md](TODO.md) for planned improvements including EDAC error classification (CE vs UE), multi-architecture validation, NUMA locality, heterogeneous core handling, and core vs thread considerations.
 
 ## License
 
