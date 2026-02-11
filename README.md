@@ -56,10 +56,34 @@ A single memtester thread cannot saturate a modern memory bus. CPU cores have a 
 |--------|----------|------------------|
 | Desktop (dual-channel DDR5) | 2 | ~2-3x |
 | Workstation (quad-channel DDR5) | 4 | ~4-6x |
-| 1-socket server (8-channel DDR4/5) | 8 | ~6-10x |
-| 2-socket server (16 channels total) | 16 | ~8-16x |
 
-The speedup is roughly proportional to the number of memory channels, since that determines how much bandwidth is available beyond what one thread can use. On dual-socket servers the NUMA locality benefit compounds with the channel parallelism -- a single process testing both sockets pays a ~30-50% bandwidth penalty on the remote socket's memory, while per-socket instances avoid this entirely. Beyond ~1-2 threads per memory channel, additional threads provide no further bandwidth benefit.
+### Current server platforms (2025-2026)
+
+| Platform | Channels/socket | Max sockets | Total channels | Expected Speedup |
+|----------|----------------|-------------|----------------|------------------|
+| AmpereOne (ARM, 1S) | 8 | 1 | 8 | ~6-10x |
+| AmpereOne M (ARM, 1S) | 12 | 1 | 12 | ~8-14x |
+| Intel Xeon 6900P (Granite Rapids, 1S) | 12 | 1 | 12 | ~8-14x |
+| AMD EPYC 9005 Turin (1S) | 12 | 1 | 12 | ~8-14x |
+| Intel Xeon 6700P (Granite Rapids, 2S) | 8 | 2 | 16 | ~10-18x |
+| AMD EPYC 9005 Turin (2S) | 12 | 2 | 24 | ~14-28x |
+| Intel Xeon 6900P (Granite Rapids, 2S) | 12 | 2 | 24 | ~14-28x |
+| Intel Xeon 6700P (Granite Rapids, 4S) | 8 | 4 | 32 | ~18-36x |
+| IBM POWER10 (SCM, 4S per node) | 16 | 4 | 64 | ~30-64x |
+| Intel Xeon 6700P (Granite Rapids, 8S) | 8 | 8 | 64 | ~30-64x |
+| IBM POWER11 (SCM, 4S per node) | 32 | 4 | 128 | ~50-128x |
+| IBM POWER10 (4-node, 16S) | 16 | 16 | 256 | ~80-256x |
+| IBM POWER11 (4-node, 16S) | 32 | 16 | 512 | ~100-512x |
+
+The speedup is roughly proportional to the number of memory channels, since that determines how much bandwidth is available beyond what one thread can use. The lower bound of each range accounts for diminishing returns at high channel counts (memory controller overhead, cache contention, OS scheduling); the upper bound assumes near-ideal scaling. On multi-socket servers the NUMA locality benefit compounds with the channel parallelism -- a single process testing both sockets pays a ~30-50% bandwidth penalty on the remote socket's memory, while per-socket instances avoid this entirely. Beyond ~1-2 threads per memory channel, additional threads provide no further bandwidth benefit.
+
+**Notes:**
+- AMD EPYC 9005 maxes out at 2 sockets. AMD relies on high core counts (up to 192 cores/socket) instead of 4S+ configurations.
+- Intel Xeon 6900P (12-channel, high-end) is 2S max. The Xeon 6700P (8-channel) scales to 4S/8S on the smaller LGA 4710 platform.
+- AmpereOne is single-socket only, compensating with up to 192 ARM cores per socket.
+- IBM POWER10 uses 16 OMI (Open Memory Interface) channels per SCM chip. The E1080 scales to 4 nodes of 4 sockets each (16S total, 256 channels).
+- IBM POWER11 doubles to 32 DDR5 ports per chip via OMI. The E1180 scales to 16 sockets across 4 nodes (512 channels total).
+- POWER systems use OMI (a serialised memory interface) rather than direct DDR channels, providing equivalent or higher bandwidth in less die area.
 
 ## Use Cases
 
@@ -328,7 +352,7 @@ EDAC is available on most Linux-supported architectures, though driver coverage 
 The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with UEFI firmware support, providing a uniform EDAC sysfs interface regardless of the specific memory controller.
 
 **Known considerations:**
-- **EDAC counters are system-wide.** pmemtester compares EDAC counters before and after the test across all memory controllers, not just the region being tested. If you are testing a subset of RAM (e.g., socket 1 via `numactl --membind=1`), an EDAC error triggered by a workload on socket 0 will still cause a FAIL. There is currently no correlation between EDAC errors and the specific memory regions under test.
+- **EDAC counters are system-wide.** pmemtester compares EDAC counters before and after the test across all memory controllers, not just the region being tested. You are always testing a subset of total RAM, (e.g. default 90% of available RAM, or 90% of available RAM on socket 1 via `numactl --membind=1`), an EDAC error triggered by the system, service or workload on socket 0 will still cause a FAIL. There is currently no correlation between EDAC errors and the specific memory regions under test.
 - On ACPI/APEI systems, the GHES firmware-first driver may take priority over OS-level EDAC drivers
 - Real-time kernels and some server vendors (HPE ProLiant) recommend disabling EDAC in favor of firmware-based error reporting (iLO/iDRAC)
 - If EDAC sysfs is absent (`/sys/devices/system/edac/mc/` empty or missing), pmemtester skips EDAC checks and reports results based on memtester exit codes alone
