@@ -48,6 +48,19 @@ Options:
   --help              Show this help message
 ```
 
+## Why Parallel?
+
+A single memtester thread cannot saturate a modern memory bus. CPU cores have a limited number of outstanding memory requests (Line Fill Buffers), so one thread typically achieves only 10-25% of peak memory bandwidth on a server CPU. Running multiple instances in parallel fills more memory channels simultaneously and, on multi-socket systems, keeps all memory accesses NUMA-local (avoiding the 30-50% bandwidth penalty of cross-socket access).
+
+| System | Channels | Expected Speedup |
+|--------|----------|------------------|
+| Desktop (dual-channel DDR5) | 2 | ~2-3x |
+| Workstation (quad-channel DDR5) | 4 | ~4-6x |
+| 1-socket server (8-channel DDR4/5) | 8 | ~6-10x |
+| 2-socket server (16 channels total) | 16 | ~8-16x |
+
+The speedup is roughly proportional to the number of memory channels, since that determines how much bandwidth is available beyond what one thread can use. On dual-socket servers the NUMA locality benefit compounds with the channel parallelism -- a single process testing both sockets pays a ~30-50% bandwidth penalty on the remote socket's memory, while per-socket instances avoid this entirely. Beyond ~1-2 threads per memory channel, additional threads provide no further bandwidth benefit.
+
 ## Use Cases
 
 ### Maximum RAM coverage
@@ -315,6 +328,7 @@ EDAC is available on most Linux-supported architectures, though driver coverage 
 The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with UEFI firmware support, providing a uniform EDAC sysfs interface regardless of the specific memory controller.
 
 **Known considerations:**
+- **EDAC counters are system-wide.** pmemtester compares EDAC counters before and after the test across all memory controllers, not just the region being tested. If you are testing a subset of RAM (e.g., socket 1 via `numactl --membind=1`), an EDAC error triggered by a workload on socket 0 will still cause a FAIL. There is currently no correlation between EDAC errors and the specific memory regions under test.
 - On ACPI/APEI systems, the GHES firmware-first driver may take priority over OS-level EDAC drivers
 - Real-time kernels and some server vendors (HPE ProLiant) recommend disabling EDAC in favor of firmware-based error reporting (iLO/iDRAC)
 - If EDAC sysfs is absent (`/sys/devices/system/edac/mc/` empty or missing), pmemtester skips EDAC checks and reports results based on memtester exit codes alone

@@ -13,6 +13,20 @@ Currently pmemtester treats any EDAC counter change as a failure. A more nuanced
 - Optionally allow CE-only runs to pass with a warning (--allow-ce flag)
 - Always fail on UE (uncorrectable = data corruption)
 
+## EDAC Region Correlation
+
+EDAC counters are system-wide -- pmemtester compares counters across all memory controllers before and after the test, with no correlation to the specific memory regions being tested. This means:
+
+- If testing a subset of RAM (e.g., socket 1 via `numactl --membind=1`), an EDAC error triggered by a workload on socket 0 will still cause a FAIL
+- There is no way to determine whether an EDAC error occurred in the memory region under test or elsewhere
+- On multi-socket systems, this can produce misleading failures when other sockets are under load
+
+Potential improvements:
+- Parse EDAC sysfs per-MC/per-csrow counters to identify which memory controller reported the error
+- When `numactl --membind=N` is used, only check EDAC counters for the corresponding memory controller(s)
+- Add `--edac-mc N` flag to restrict EDAC checking to a specific memory controller
+- Log which MC/csrow/channel reported the error change for easier diagnosis
+
 ## Architecture Support
 
 pmemtester currently assumes x86 Linux. Validate and test on:
@@ -56,3 +70,9 @@ pmemtester uses `nproc` which returns the number of hardware threads (including 
 - Using every thread rather than every core is unlikely to be faster for memtester (memory-bound workload), but it avoids issues with the kernel scheduler not equally loading all physical cores
 - More threads with smaller allocations may actually improve test coverage by exercising more memory controller interleaving patterns
 - Document this trade-off and consider an optional `--threads N` override for users who want explicit control
+
+## FAQ
+
+Add a FAQ section to the README. Candidate questions:
+
+- **Why not drop caches before running?** `MemAvailable` in `/proc/meminfo` already accounts for reclaimable page cache -- the kernel will evict cached pages as needed when memtester allocates memory. Dropping caches (`echo 3 > /proc/sys/vm/drop_caches`) before running is unnecessary because the available memory size should not be dependent on page cache size. The kernel reclaims cache pages on demand, so memtester gets the same usable memory either way.
