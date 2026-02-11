@@ -119,7 +119,7 @@ To test as much RAM as possible, use `--percent 95` with available RAM (the defa
 sudo pmemtester --percent 95
 ```
 
-Using 100% is not safe -- pmemtester itself, the shell, and the OS kernel need some working memory. The `available` RAM type (from `/proc/meminfo` `MemAvailable`) already excludes memory used by the kernel and page cache, so 95% of available is aggressive but leaves enough headroom (~200-500MB on a typical server) for the OS and pmemtester processes to function without triggering the OOM killer.
+Using 100% is not safe -- pmemtester itself, the shell, and the OS kernel need some working memory. The `available` RAM type uses `MemAvailable` from `/proc/meminfo` (present since Linux 3.14), which estimates how much memory can be allocated by new applications without causing swapping. The kernel calculates it roughly as `MemFree + Reclaimable Page Cache + Reclaimable Slab - Watermarks`, accounting for memory that is technically in use but can be reclaimed under pressure. So 95% of available is aggressive but leaves enough headroom (~200-500MB on a typical server) for the OS and pmemtester processes to function without triggering the OOM killer.
 
 | Percent | Risk | Use case |
 |---------|------|----------|
@@ -337,7 +337,8 @@ make dist              # Create .tgz distribution archive
 ## Requirements
 
 - **memtester** binary (not bundled) -- [pyropus.ca](https://pyropus.ca./software/memtester/)
-- Linux kernel with `/proc/meminfo` and `nproc`
+- Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
+- `nproc` (from coreutils)
 - EDAC support (optional -- gracefully skipped if absent)
 - For testing: bats 1.13.0+, kcov 35+, shellcheck 0.10.0+
 

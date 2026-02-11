@@ -39,7 +39,7 @@ pmemtester currently assumes x86 Linux. Validate and test on:
 Considerations:
 - memtester itself is portable C, so the wrapper should work anywhere memtester runs
 - EDAC sysfs interface is architecture-independent (`/sys/devices/system/edac/mc/`)
-- `/proc/meminfo` and `nproc` are available on all Linux architectures
+- `/proc/meminfo` and `nproc` are available on all Linux architectures, but `MemAvailable` requires kernel 3.14+ (the default `--ram-type available` will fail on older kernels with "field 'MemAvailable' not found")
 - `ulimit -l` memory locking behavior may differ across platforms
 - EDAC_GHES (firmware-first) may be the only EDAC path on some ARM64 servers
 
@@ -87,4 +87,4 @@ Run a short calibration test at the start of every run to estimate completion ti
 
 Add a FAQ section to the README. Candidate questions:
 
-- **Why not drop caches before running?** `MemAvailable` in `/proc/meminfo` already accounts for reclaimable page cache -- the kernel will evict cached pages as needed when memtester allocates memory. Dropping caches (`echo 3 > /proc/sys/vm/drop_caches`) before running is unnecessary because the available memory size should not be dependent on page cache size. The kernel reclaims cache pages on demand, so memtester gets the same usable memory either way.
+- **Why not drop caches before running?** `MemAvailable` in `/proc/meminfo` already accounts for reclaimable page cache and reclaimable slab (dentries/inodes) -- the kernel will evict these as needed when memtester allocates memory. Dropping caches (`echo 3 > /proc/sys/vm/drop_caches`) before running is unnecessary because the kernel reclaims clean cache pages on demand under allocation pressure. `MemAvailable` is deliberately conservative (it subtracts low watermarks and counts only half of reclaimable slab to account for fragmentation), so the actual reclaimable memory is slightly higher than the estimate -- but this works in pmemtester's favour, not against it. The practical outcome is the same whether you drop caches or not.
