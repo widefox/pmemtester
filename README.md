@@ -377,7 +377,7 @@ EDAC is available on most Linux-supported architectures, though driver coverage 
 The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with UEFI firmware support, providing a uniform EDAC sysfs interface regardless of the specific memory controller.
 
 **Known considerations:**
-- **EDAC counters are system-wide.** pmemtester compares EDAC counters before and after the test across all memory controllers, not just the region being tested. You are always testing a subset of total RAM, (e.g. default 90% of available RAM, or 90% of available RAM on socket 1 via `numactl --membind=1`), an EDAC error triggered by the system, service or workload on socket 0 will still cause a FAIL. There is currently no correlation between EDAC errors and the specific memory regions under test.
+- **EDAC counters are system-wide.** pmemtester compares EDAC counters before and after the test across all memory controllers, not just the memory regions being tested. Since you are always testing a subset of total RAM (e.g. default 90% of available RAM), any EDAC error that occurs during the test — whether from untested memory, other workloads, OS activity, or other NUMA nodes — will cause a FAIL. There is currently no correlation between EDAC errors and the specific memory regions under test.
 - On ACPI/APEI systems, the GHES firmware-first driver may take priority over OS-level EDAC drivers
 - Real-time kernels and some server vendors (HPE ProLiant) recommend disabling EDAC in favor of firmware-based error reporting (iLO/iDRAC)
 - If EDAC sysfs is absent (`/sys/devices/system/edac/mc/` empty or missing), pmemtester skips EDAC checks and reports results based on memtester exit codes alone
