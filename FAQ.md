@@ -142,6 +142,57 @@ This is why pmemtester's parallel design matters most on multi-socket systems: t
 - IBM POWER11 doubles to 32 DDR5 ports per chip via OMI. The E1180 scales to 16 sockets across 4 nodes (512 channels total).
 - POWER systems use OMI (a serialised memory interface) rather than direct DDR channels, providing equivalent or higher bandwidth in less die area.
 
+## Why one memtester per thread instead of one per core?
+
+pmemtester launches one memtester instance per hardware thread (from `nproc`), not per physical core. On a 16-core/32-thread system, that means 32 instances. This is deliberate -- it avoids a scheduler problem that would make per-core launches slower and less predictable.
+
+### The scheduler problem with fewer processes than threads
+
+If you launched 16 processes on 32 logical CPUs, the Linux scheduler would need to distribute them evenly -- but load balancing is periodic, not instantaneous. This applies to both CFS (< 6.6) and the EEVDF scheduler that replaced it in Linux 6.6:
+
+- **Busy balancing** (tick-based): Runs every ~4ms on busy CPUs, checks if a sibling is idle
+- **Idle balancing** (pull-based): When a CPU goes idle, it pulls work from a busy CPU
+- **Newidle balancing**: Between a task sleeping and the next tick, the CPU can steal work
+
+These balancing mechanisms are part of the kernel's scheduling domain infrastructure, shared by both CFS and EEVDF. EEVDF changes how the scheduler picks which task to run next on a given CPU (using virtual deadlines instead of virtual runtime), but the cross-CPU load balancing that decides *where* tasks run uses the same periodic rebalancing logic. The transient imbalance problem described below is identical under both schedulers.
+
+At any given moment, the scheduler might place two memtester processes on sibling SMT threads of the same physical core while leaving another core entirely idle. Idle balancing fixes this within ~1-4ms, but during that window the two co-scheduled processes share:
+
+- **L1/L2 cache** (contention, more evictions)
+- **Memory pipeline** (load/store buffers, fill buffers)
+- **TLB entries** (reduced effective TLB for each process)
+
+For a memory-bound workload like memtester, co-scheduling on SMT siblings gives ~40-60% of single-thread throughput per process. Meanwhile the idle core contributes nothing.
+
+### Per-thread default eliminates the problem
+
+With 32 processes on 32 logical CPUs, every run queue has work. There is no idle CPU, no migration question, no transient imbalance. The scheduler places one process per logical CPU and leaves them there. Two sibling SMT threads on the same core each get ~50-60% of the core's memory bandwidth, but both are working, so the core's total memory bandwidth is fully utilised (~95-100%).
+
+### Quantifying the difference
+
+On a 16-core/32-thread system testing 28 GB (90% of 32 GB):
+
+| Default | Processes | RAM/process | Scheduler issue | Effective bandwidth |
+|---------|-----------|-------------|-----------------|---------------------|
+| Per-thread (current) | 32 | 875 MB | None -- all CPUs busy | ~95-100% of peak |
+| Per-core | 16 | 1750 MB | Transient co-scheduling | ~85-95% of peak |
+
+The per-core approach wastes ~5-15% of memory bandwidth during transient imbalances. Over a multi-minute memtester run, these transient periods add up to a measurable slowdown.
+
+### Don't SMT threads share bandwidth anyway?
+
+Two threads on the same core get ~1.0-1.15x the bandwidth of one thread, not 2x. But the advantage of per-thread is not extra bandwidth per core -- it is:
+
+1. **Guaranteed scheduling fairness**: No core sits idle while a sibling is double-loaded
+2. **Memory controller interleaving**: 32 smaller allocations (875 MB each) exercise more diverse physical address ranges than 16 larger ones (1750 MB each), potentially hitting more memory controller channels
+3. **Simplicity**: `nproc` matches the kernel's view of schedulable entities -- no SMT detection logic needed
+
+### When per-core would be better
+
+Per-core only wins if you pin each process to a specific core with `taskset` (eliminating scheduler indeterminism), the system has no SMT (where `nproc` already gives per-core), or you are testing with extremely small RAM per thread where process overhead dominates.
+
+For explicit control, the planned `--threads N` option (see [TODO.md](TODO.md#cores-vs-threads)) will allow users to override the default.
+
 ## Which Linux distros support EDAC?
 
 Nearly all major distros enable `CONFIG_EDAC=y` (built-in) with hardware drivers as loadable modules:

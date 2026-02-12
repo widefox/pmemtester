@@ -52,7 +52,7 @@ Options:
 
 A single memtester thread cannot saturate a modern memory bus -- one thread typically achieves only 15-25% of peak memory bandwidth. Running one instance per CPU thread fills more memory channels simultaneously, reaching ~80% of peak bandwidth and giving a **4-7x speedup** per socket. On multi-socket systems, pmemtester's per-thread parallelism also keeps memory accesses NUMA-local, adding a further **1.4-2x** benefit over a non-NUMA-aware approach.
 
-See [FAQ.md](FAQ.md#why-does-parallel-memtester-help) for detailed per-platform speedup tables, NUMA penalty measurements, and methodology.
+See [FAQ.md](FAQ.md#why-does-parallel-memtester-help) for detailed per-platform speedup tables, NUMA penalty measurements, methodology, and [why per-thread is better than per-core](FAQ.md#why-one-memtester-per-thread-instead-of-one-per-core).
 
 ## Use Cases
 
@@ -289,7 +289,7 @@ make dist              # Create .tgz distribution archive
 
 ## EDAC Compatibility
 
-pmemtester optionally checks Linux [EDAC](https://docs.kernel.org/driver-api/edac.html) (Error Detection and Correction) hardware error counters before and after the memory test. **ECC RAM is required** for EDAC to report anything -- on non-ECC systems the EDAC driver detects no ECC capability and does not load, so pmemtester gracefully skips the check.
+pmemtester checks Linux [EDAC](https://docs.kernel.org/driver-api/edac.html) (Error Detection and Correction) hardware error counters before and after the memory test when available. **ECC RAM is required** for EDAC to report anything -- on non-ECC systems the EDAC driver detects no ECC capability and does not load, so pmemtester gracefully skips the check.
 
 Nearly all major distros enable `CONFIG_EDAC=y` with hardware drivers as modules, and EDAC is available on most Linux-supported architectures (x86, ARM64, PowerPC, RISC-V, LoongArch). See [FAQ.md](FAQ.md#which-linux-distros-support-edac) for per-distro and per-architecture compatibility tables.
 
