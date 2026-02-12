@@ -8,6 +8,9 @@ GPATH
 GRTAGS
 GTAGS
 
+# Claude Code
+.claude/
+
 # Emacs
 *~
 \#*\#
