@@ -406,7 +406,7 @@ No userspace memory stress test tool detects ECC correctable errors on its own -
 
 ## FAQ
 
-See [FAQ.md](FAQ.md) for frequently asked questions, including speed comparisons with stressapptest, testing methodology differences, and cache behaviour.
+See [FAQ.md](FAQ.md) for frequently asked questions, including speed comparisons with stressapptest, testing methodology differences, hard vs soft errors, CE thresholds by vendor, CE-to-UE predictive research, and cache behaviour.
 
 ## See Also
 
