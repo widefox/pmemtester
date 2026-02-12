@@ -50,64 +50,9 @@ Options:
 
 ## Why Parallel?
 
-A single memtester thread cannot saturate a modern memory bus. CPU cores have a limited number of outstanding memory requests (Line Fill Buffers), so one thread typically achieves only 15-25% of peak memory bandwidth on a server CPU ([STREAM benchmark data](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/)). Running multiple instances in parallel fills more memory channels simultaneously and reaches ~80% of peak bandwidth with around 10 threads on current x86 hardware -- roughly a **4-7x speedup** over a single thread on one socket.
+A single memtester thread cannot saturate a modern memory bus -- one thread typically achieves only 15-25% of peak memory bandwidth. Running one instance per CPU thread fills more memory channels simultaneously, reaching ~80% of peak bandwidth and giving a **4-7x speedup** per socket. On multi-socket systems, pmemtester's per-thread parallelism also keeps memory accesses NUMA-local, adding a further **1.4-2x** benefit over a non-NUMA-aware approach.
 
-On multi-socket systems, pmemtester's per-thread parallelism also keeps memory accesses NUMA-local. A single memtester process testing both sockets would pay a cross-socket bandwidth penalty (see below), while pmemtester's many independent instances naturally access memory local to the core they run on.
-
-| System | Channels | Speedup vs 1 thread |
-|--------|----------|---------------------|
-| Desktop (dual-channel DDR5) | 2 | ~2x |
-| Workstation (quad-channel DDR5) | 4 | ~3-4x |
-
-### Current server platforms (2025-2026)
-
-| Platform | Ch/socket | Sockets | Total ch | Speedup vs 1 thread |
-|----------|-----------|---------|----------|----------------------|
-| AmpereOne (ARM, 1S) | 8 | 1 | 8 | ~4-5x |
-| AmpereOne M (ARM, 1S) | 12 | 1 | 12 | ~4-6x |
-| Intel Xeon 6900P (Granite Rapids, 1S) | 12 | 1 | 12 | ~4-6x |
-| AMD EPYC 9005 Turin (1S) | 12 | 1 | 12 | ~4-6x |
-| Intel Xeon 6700P (Granite Rapids, 2S) | 8 | 2 | 16 | ~8-10x |
-| AMD EPYC 9005 Turin (2S) | 12 | 2 | 24 | ~8-12x |
-| Intel Xeon 6900P (Granite Rapids, 2S) | 12 | 2 | 24 | ~8-12x |
-| Intel Xeon 6700P (Granite Rapids, 4S) | 8 | 4 | 32 | ~16-20x |
-| IBM POWER10 (SCM, 4S per node) | 16 | 4 | 64 | ~16-24x |
-| Intel Xeon 6700P (Granite Rapids, 8S) | 8 | 8 | 64 | ~25-40x |
-| IBM POWER11 (SCM, 4S per node) | 32 | 4 | 128 | ~16-28x |
-| IBM POWER10 (4-node, 16S) | 16 | 16 | 256 | ~40-80x |
-| IBM POWER11 (4-node, 16S) | 32 | 16 | 512 | ~50-100x |
-
-**How the speedup estimates work:**
-
-Within a single socket, the speedup is limited by how much bandwidth one thread can use versus the socket's peak. STREAM benchmarks consistently show one thread achieves ~15-25% of peak socket bandwidth on current x86 and ARM server CPUs, so saturating one socket gives ~4-7x. Multi-socket configurations multiply this by the number of sockets, but with diminishing returns from interconnect overhead, memory controller contention, and OS scheduling -- real-world multi-socket STREAM scaling is typically 85-95% efficient per additional socket at 2S, declining to ~60-80% at 8S+ and ~50-65% at 16S.
-
-Beyond ~1-2 threads per memory channel, additional threads provide no further bandwidth benefit. The number of channels determines the ceiling; the number of threads needed to reach it is much smaller.
-
-### Cross-socket bandwidth penalty (NUMA)
-
-On multi-socket systems, accessing memory attached to a remote socket incurs a significant bandwidth and latency penalty. pmemtester avoids this because each instance runs on a local core and allocates local memory, but a single-threaded memory tester spanning both sockets would pay the full penalty:
-
-| Metric | Modern 2S systems | Older 2S systems |
-|--------|-------------------|------------------|
-| Latency penalty | ~30-50% higher for remote | up to 2-7x higher |
-| Read bandwidth penalty | ~50-70% reduction | ~67-84% reduction |
-| Write bandwidth penalty | ~15-30% reduction | varies |
-
-Measured examples:
-- Intel Xeon E5 (Haswell, 2S): remote reads dropped to **16-33%** of local bandwidth; remote writes retained ~83% ([Intel Community](https://community.intel.com/t5/Software-Tuning-Performance/Memory-bandwidth-on-a-NUMA-system/td-p/1095836))
-- AMD EPYC 9005 (Turin): intra-socket cross-CCD penalty is low (~20-30ns) due to the centralised IO die design; cross-socket penalty follows the ~30-50% range ([Chips and Cheese](https://chipsandcheese.com/p/amds-epyc-9355p-inside-a-32-core))
-- Intel Xeon 6900P (Granite Rapids): intra-socket cross-die latency can reach ~180ns in HEX mode due to distributed memory controllers across 3 compute tiles ([Phoronix](https://www.phoronix.com/review/xeon-6980p-snc3-hex))
-- Under heavy contention (many cores competing for one node's memory), remote latencies can reach 4x normal (~1200 vs ~300 cycles) ([ACM Queue](https://queue.acm.org/detail.cfm?id=2852078))
-
-This is why pmemtester's parallel design matters most on multi-socket systems: the aggregate NUMA locality benefit is equivalent to a **1.4-2x** additional speedup compared to a non-NUMA-aware single-process approach.
-
-**Platform notes:**
-- AMD EPYC 9005 maxes out at 2 sockets. AMD relies on high core counts (up to 192 cores/socket) instead of 4S+ configurations.
-- Intel Xeon 6900P (12-channel, high-end) is 2S max. The Xeon 6700P (8-channel) scales to 4S/8S on the smaller LGA 4710 platform.
-- AmpereOne is single-socket only, compensating with up to 192 ARM cores per socket.
-- IBM POWER10 uses 16 OMI (Open Memory Interface) channels per SCM chip. The E1080 scales to 4 nodes of 4 sockets each (16S total, 256 channels).
-- IBM POWER11 doubles to 32 DDR5 ports per chip via OMI. The E1180 scales to 16 sockets across 4 nodes (512 channels total).
-- POWER systems use OMI (a serialised memory interface) rather than direct DDR channels, providing equivalent or higher bandwidth in less die area.
+See [FAQ.md](FAQ.md#why-does-parallel-memtester-help) for detailed per-platform speedup tables, NUMA penalty measurements, and methodology.
 
 ## Use Cases
 
