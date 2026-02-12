@@ -11,7 +11,7 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) -- t
 - Runs one memtester instance per CPU thread to saturate the memory bus on any system
 - Extra threads may help the memory controller interleave across banks and cover OS scheduling gaps
 - Configurable RAM percentage (default 90% of available)
-- RAM type selection: available (default), total, or free
+- RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
 - Linux EDAC hardware error detection (before/after comparison)
 - Per-thread logging with aggregated master log
