@@ -2,7 +2,7 @@
 
 [![License: GPL-2.0-only](https://img.shields.io/badge/License-GPL--2.0--only-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
 
-A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) -- the only Linux tool that combines memory stress testing with ECC correctable error detection in a single package. No reboot, no separate monitor daemon.
+A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) -- the first Linux tool that combines memory stress testing with ECC correctable error detection in a single package. No reboot, no separate monitor daemon.
 
 **Repository:** https://github.com/widefox/pmemtester
 
@@ -402,7 +402,11 @@ See [TODO.md](TODO.md) for planned improvements including EDAC error classificat
 | rasdaemon | Userspace daemon | N/A (monitor) | **Yes** (EDAC tracing) | Yes (v0.8.4, 2025) | GPL-2.0 |
 | edac-utils | Userspace | N/A (reporting) | **Yes** (EDAC sysfs) | No (dormant since 2008) | GPL-2.0 |
 
-No userspace memory stress test tool detects ECC correctable errors on its own -- ECC hardware silently corrects single-bit errors before userspace reads the data. pmemtester is the only tool that combines pattern-based stress testing with EDAC error detection in a single package. The alternative is to run a stress tool while rasdaemon monitors EDAC counters separately.
+No userspace memory stress test tool detects ECC correctable errors on its own -- ECC hardware silently corrects single-bit errors before userspace reads the data. pmemtester is the first tool that combines pattern-based stress testing with EDAC error detection in a single package. The alternative is to run a stress tool while rasdaemon monitors EDAC counters separately.
+
+## FAQ
+
+See [FAQ.md](FAQ.md) for frequently asked questions, including speed comparisons with stressapptest, testing methodology differences, and cache behaviour.
 
 ## See Also
 
