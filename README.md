@@ -2,7 +2,7 @@
 
 [![License: GPL-2.0-only](https://img.shields.io/badge/License-GPL--2.0--only-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
 
-A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) -- the quickest way to stress-test RAM on Linux. Safe to run on any host with default settings.
+A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) -- the only Linux tool that combines memory stress testing with ECC correctable error detection in a single package. No reboot, no separate monitor daemon.
 
 **Repository:** https://github.com/widefox/pmemtester
 
@@ -385,6 +385,28 @@ The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with
 ## Roadmap
 
 See [TODO.md](TODO.md) for planned improvements including EDAC error classification (CE vs UE), multi-architecture validation, NUMA locality, heterogeneous core handling, and core vs thread considerations.
+
+## Linux Memory Testing Tools Comparison
+
+| Tool | Environment | Parallel | ECC CE Detection | Active | License |
+|------|-------------|----------|-----------------|--------|---------|
+| **pmemtester** | Userspace (Bash) | Yes (1 per thread) | **Yes** (EDAC before/after) | Yes (v0.1, 2026) | GPL-2.0 |
+| memtester | Userspace | No | No | Yes (v4.7.1, 2024) | GPL-2.0 |
+| MemTest86 (PassMark) | Standalone boot | Yes | **Yes** (direct HW polling, per-DIMM) | Yes (v11.6, 2026) | Proprietary freeware |
+| Memtest86+ | Standalone boot | Yes | **Partial** (AMD Ryzen only, manual recompile) | Yes (v8.0, 2025) | GPL-2.0 |
+| stressapptest | Userspace | Yes | No | Low (v1.0.11, 2023) | Apache-2.0 |
+| stress-ng | Userspace | Yes | No | Yes (monthly releases) | GPL-2.0 |
+| DimmReaper | Userspace | Yes | No | Low (2024) | GPL-2.0 |
+| ocp-diag-memtester | Userspace (Python) | No | No | Low (2023) | Apache-2.0 |
+| mprime/Prime95 | Userspace | Yes | No | Yes | Freeware |
+| rasdaemon | Userspace daemon | N/A (monitor) | **Yes** (EDAC tracing) | Yes (v0.8.4, 2025) | GPL-2.0 |
+| edac-utils | Userspace | N/A (reporting) | **Yes** (EDAC sysfs) | No (dormant since 2008) | GPL-2.0 |
+
+No userspace memory stress test tool detects ECC correctable errors on its own -- ECC hardware silently corrects single-bit errors before userspace reads the data. pmemtester is the only tool that combines pattern-based stress testing with EDAC error detection in a single package. The alternative is to run a stress tool while rasdaemon monitors EDAC counters separately.
+
+## See Also
+
+- [ocp-diag-memtester](https://github.com/opencomputeproject/ocp-diag-memtester) -- OCP diagnostic wrapper for memtester
 
 ## License
 

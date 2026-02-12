@@ -83,6 +83,26 @@ Run a short calibration test at the start of every run to estimate completion ti
 - The calibration run also serves as a quick sanity check that memtester works before committing to a long run
 - Consider caching calibration results per-host (MB/s throughput) to skip the sample on subsequent runs
 
+## v0.2: Coloured Output (Traffic Lights)
+
+Add coloured pass/fail indicators to terminal output:
+
+- **Green**: PASS — all memtester instances passed, no EDAC errors
+- **Red**: FAIL — memtester failure or EDAC uncorrectable error (UE)
+- **Yellow**: non-fatal fail — EDAC correctable error only (CE, single-bit ECC)
+
+The failure output should specify the source: whether the failure came from EDAC or memtester (currently the verdict is opaque about which subsystem detected the problem).
+
+## Sequential Rolling RAM Test
+
+Investigate testing RAM sequentially in chunks, so the total tested RAM exceeds what can be tested in a single pass:
+
+- Run memtester on chunk 1 (e.g., 25% of RAM), then chunk 2, etc.
+- Total coverage exceeds what a single test can address at once (limited by available RAM)
+- Useful for machines where you want to test close to 100% of physical RAM but can't lock it all simultaneously
+- Consider a `--rolling` or `--sequential` mode
+- Need to investigate whether the kernel reallocates the same physical pages across runs or whether this genuinely tests different physical memory
+
 ## FAQ
 
 Add a FAQ section to the README. Candidate questions:
