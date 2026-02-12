@@ -81,6 +81,38 @@ The consensus: CEs are a meaningful signal at fleet scale, but not all CEs are e
 
 References: [Schroeder et al., "DRAM Errors in the Wild" (2009)](https://cacm.acm.org/research/dram-errors-in-the-wild/), [Meza et al., "Revisiting Memory Errors" (DSN 2015)](https://users.ece.cmu.edu/~omutlu/pub/memory-errors-at-facebook_dsn15.pdf), [Levy et al., "Lessons Learned from Cielo" (SC 2018)](https://ieeexplore.ieee.org/document/8665809/), [Li et al., "From Correctable to Uncorrectable" (SC 2022)](https://dl.acm.org/doi/abs/10.5555/3571885.3571986), [Sridharan et al., "Memory Errors in Modern Systems" (ASPLOS 2015)](https://pages.cs.wisc.edu/~remzi/Classes/739/Fall2015/Papers/memoryerrors-asplos15.pdf).
 
+## Which Linux distros support EDAC?
+
+Nearly all major distros enable `CONFIG_EDAC=y` (built-in) with hardware drivers as loadable modules:
+
+| Distro | EDAC Enabled | Notes |
+|--------|-------------|-------|
+| RHEL 8/9/10 | Yes | Full support |
+| Rocky / AlmaLinux 9 | Yes | Mirrors RHEL |
+| Fedora | Yes | Full driver set |
+| Ubuntu 22.04/24.04 | Yes | Cloud kernels may differ |
+| Debian 12 | Yes | Cloud kernel disables EDAC |
+| SLES / openSUSE | Yes | Full server-grade support |
+| Arch Linux | Yes | Loads even on desktop hardware |
+| Gentoo | Manual | User must enable in kernel config |
+
+## Which CPU architectures support EDAC?
+
+EDAC is available on most Linux-supported architectures, though driver coverage varies:
+
+| Architecture | EDAC Support | Drivers |
+|---|---|---|
+| x86 / x86_64 | Yes | ~25 drivers: Intel (440BX through Ice Lake+), AMD (K8 through Zen 6) |
+| ARM64 / AArch64 | Yes | ThunderX, X-Gene, BlueField, Qualcomm LLCC, DMC-520, Cortex-A72 |
+| ARM (32-bit) | Yes | Calxeda, Altera SOCFPGA, Armada XP, Aspeed BMC, TI |
+| PowerPC | Yes | IBM CPC925, Cell BE, PA Semi, Freescale MPC85xx |
+| RISC-V | Yes | SiFive CCACHE only |
+| LoongArch | Yes | Loongson 3A5000/3A6000 family |
+| MIPS | Partial | Cavium Octeon only |
+| s390 | No | Uses hypervisor/firmware RAS instead |
+
+The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with UEFI firmware support, providing a uniform EDAC sysfs interface regardless of the specific memory controller.
+
 ## Why not drop caches before running?
 
 `MemAvailable` in `/proc/meminfo` already accounts for reclaimable page cache and reclaimable slab (dentries/inodes) -- the kernel will evict these as needed when memtester allocates memory. Dropping caches (`echo 3 > /proc/sys/vm/drop_caches`) before running is unnecessary because the kernel reclaims clean cache pages on demand under allocation pressure. `MemAvailable` is deliberately conservative (it subtracts low watermarks and counts only half of reclaimable slab to account for fragmentation), so the actual reclaimable memory is slightly higher than the estimate -- but this works in pmemtester's favour, not against it. The practical outcome is the same whether you drop caches or not. Note that `drop_caches` only releases *clean* pages -- dirty pages (modified but not yet written to disk) are kept. If you did want to maximise free memory manually, you would need to run `sync` first to flush dirty pages to disk, converting them to clean pages that `drop_caches` can then release. But again, the kernel handles all of this automatically under allocation pressure, so neither `sync` nor `drop_caches` is needed before running pmemtester.

@@ -103,6 +103,31 @@ Investigate testing RAM sequentially in chunks, so the total tested RAM exceeds 
 - Consider a `--rolling` or `--sequential` mode
 - Need to investigate whether the kernel reallocates the same physical pages across runs or whether this genuinely tests different physical memory
 
+## Single Binary: Port to C and Integrate with memtester
+
+Rewrite pmemtester as a C program that integrates memtester's testing logic directly, producing a single `pmemtester` executable with no external dependency on the `memtester` binary.
+
+Rationale:
+- Eliminates the external memtester dependency (currently must be installed separately)
+- Single binary is easier to deploy, package, and distribute
+- Enables tighter integration: per-thread EDAC correlation, real-time progress reporting, structured output
+- Removes Bash overhead and limitations (integer-only arithmetic, process management via PIDs, no native threading)
+- memtester is GPL-2.0, same as pmemtester -- licence-compatible for integration
+
+Approach:
+- Fork memtester's test routines (`tests.c`) into pmemtester
+- Replace memtester's single-threaded `main()` with pthreads-based parallel execution
+- Integrate EDAC sysfs reading directly (currently done via shell commands and `diff`)
+- Keep the CLI interface compatible (`--percent`, `--ram-type`, `--iterations`, etc.)
+- Use `mlock()` directly instead of relying on `ulimit -l` shell workarounds
+- Add structured output (JSON/machine-readable) alongside human-readable output
+
+Considerations:
+- memtester's test patterns must be preserved exactly to maintain fault coverage
+- Memory allocation strategy changes: memtester uses `mmap(MAP_LOCKED)` for a single region; pmemtester would need per-thread allocations
+- Cross-platform portability: memtester supports non-Linux systems; pmemtester is Linux-only (EDAC dependency)
+- Build system: autotools or meson, with the test suite ported from bats to a C test framework or kept as integration tests
+
 ## FAQ
 
 Add more items to [FAQ.md](FAQ.md). Candidate topics:

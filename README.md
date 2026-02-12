@@ -346,35 +346,7 @@ make dist              # Create .tgz distribution archive
 
 pmemtester optionally checks Linux [EDAC](https://docs.kernel.org/driver-api/edac.html) (Error Detection and Correction) hardware error counters before and after the memory test. **ECC RAM is required** for EDAC to report anything -- on non-ECC systems the EDAC driver detects no ECC capability and does not load, so pmemtester gracefully skips the check.
 
-Nearly all major distros enable `CONFIG_EDAC=y` (built-in) with hardware drivers as loadable modules:
-
-| Distro | EDAC Enabled | Notes |
-|--------|-------------|-------|
-| RHEL 8/9/10 | Yes | Full support |
-| Rocky / AlmaLinux 9 | Yes | Mirrors RHEL |
-| Fedora | Yes | Full driver set |
-| Ubuntu 22.04/24.04 | Yes | Cloud kernels may differ |
-| Debian 12 | Yes | Cloud kernel disables EDAC |
-| SLES / openSUSE | Yes | Full server-grade support |
-| Arch Linux | Yes | Loads even on desktop hardware |
-| Gentoo | Manual | User must enable in kernel config |
-
-### Architecture Support
-
-EDAC is available on most Linux-supported architectures, though driver coverage varies:
-
-| Architecture | EDAC Support | Drivers |
-|---|---|---|
-| x86 / x86_64 | Yes | ~25 drivers: Intel (440BX through Ice Lake+), AMD (K8 through Zen 6) |
-| ARM64 / AArch64 | Yes | ThunderX, X-Gene, BlueField, Qualcomm LLCC, DMC-520, Cortex-A72 |
-| ARM (32-bit) | Yes | Calxeda, Altera SOCFPGA, Armada XP, Aspeed BMC, TI |
-| PowerPC | Yes | IBM CPC925, Cell BE, PA Semi, Freescale MPC85xx |
-| RISC-V | Yes | SiFive CCACHE only |
-| LoongArch | Yes | Loongson 3A5000/3A6000 family |
-| MIPS | Partial | Cavium Octeon only |
-| s390 | No | Uses hypervisor/firmware RAS instead |
-
-The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with UEFI firmware support, providing a uniform EDAC sysfs interface regardless of the specific memory controller.
+Nearly all major distros enable `CONFIG_EDAC=y` with hardware drivers as modules, and EDAC is available on most Linux-supported architectures (x86, ARM64, PowerPC, RISC-V, LoongArch). See [FAQ.md](FAQ.md#which-linux-distros-support-edac) for per-distro and per-architecture compatibility tables.
 
 **Known considerations:**
 - **EDAC counters are system-wide.** pmemtester compares EDAC counters before and after the test across all memory controllers, not just the memory regions being tested. Since you are always testing a subset of total RAM (e.g. default 90% of available RAM), any EDAC error that occurs during the test — whether from untested memory, other workloads, OS activity, or other NUMA nodes — will cause a FAIL. There is currently no correlation between EDAC errors and the specific memory regions under test.
