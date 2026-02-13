@@ -2,7 +2,7 @@
 
 [![License: GPL-2.0-only](https://img.shields.io/badge/License-GPL--2.0--only-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
 
-A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) -- the first Linux tool that combines memory stress testing with ECC correctable error detection in a single package. No reboot, no separate monitor daemon.
+A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/), and the first Linux memory stress tester with ECC error detection. The aim is the quickest way to find bad memory with Linux.
 
 **Repository:** https://github.com/widefox/pmemtester
 
@@ -54,7 +54,7 @@ The `--memtester-dir` default may differ on distro-packaged installations (see [
 
 ## Why Parallel?
 
-A single memtester thread cannot saturate a modern memory bus -- one thread typically achieves only 15-25% of peak memory bandwidth. Running one instance per physical CPU core fills more memory channels simultaneously, reaching ~80-95% of peak bandwidth and giving a **4-7x speedup** per socket. On multi-socket systems, pmemtester's per-core parallelism also keeps memory accesses NUMA-local, adding a further **1.4-2x** benefit over a non-NUMA-aware approach.
+A single memtester thread cannot saturate a modern memory bus -- one thread typically achieves only 15-25% of peak memory bandwidth. Running one instance per CPU core fills more memory channels simultaneously, reaching ~75-90% of peak bandwidth and giving a **4-7x speedup** per socket. On multi-socket systems, pmemtester's per-core parallelism also keeps memory accesses NUMA-local, adding a further **1.4-2x** benefit over a non-NUMA-aware approach.
 
 See [FAQ.md](FAQ.md#why-does-parallel-memtester-help) for detailed per-platform speedup tables, NUMA penalty measurements, methodology, and [why per-core is better than per-thread](FAQ.md#why-one-memtester-per-core-instead-of-one-per-thread).
 
@@ -343,7 +343,7 @@ See [TODO.md](TODO.md) for planned improvements including EDAC region correlatio
 | rasdaemon | Userspace daemon | N/A (monitor) | **Yes** (EDAC tracing) | Yes (v0.8.4, 2025) | GPL-2.0 |
 | edac-utils | Userspace | N/A (reporting) | **Yes** (EDAC sysfs) | No (dormant since 2008) | GPL-2.0 |
 
-No userspace memory stress test tool detects ECC correctable errors on its own -- ECC hardware silently corrects single-bit errors before userspace reads the data. pmemtester is the first tool that combines pattern-based stress testing with EDAC error detection in a single package. The alternative is to run a stress tool while rasdaemon monitors EDAC counters separately.
+No userspace memory stress test tool detects ECC correctable errors on its own -- ECC hardware silently corrects single-bit errors before userspace reads the data. pmemtester is the first tool that combines pattern-based stress testing with EDAC error detection. The alternative is to run a stress tool while rasdaemon monitors EDAC counters separately.
 
 ### Userspace vs bare-metal testing
 
@@ -371,7 +371,7 @@ Each major userspace tool takes a fundamentally different approach to finding me
 
 pmemtester wraps memtester's thorough pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC monitoring (detecting hardware errors invisible to all three tools above).
 
-See [FAQ.md](FAQ.md#what-does-pmemtester-test-that-stressapptest-doesnt-and-vice-versa) for detailed algorithmic comparisons and throughput benchmarks.
+See [FAQ.md](FAQ.md#what-does-pmemtester-test-that-stressapptest-doesnt-and-vice-versa) for detailed algorithmic comparisons.
 
 References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [stressapptest repository](https://github.com/stressapptest/stressapptest), [Google: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [stress-ng homepage](https://github.com/ColinIanKing/stress-ng), [stress-ng vm methods](https://wiki.ubuntu.com/Kernel/Reference/stress-ng).
 

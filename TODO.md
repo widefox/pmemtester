@@ -16,7 +16,7 @@ Potential improvements:
 
 ## 2. Architecture Support
 
-pmemtester currently assumes x86 Linux. Validate and test on:
+pmemtester uses portable Linux interfaces and should run on any architecture where memtester compiles, but has only been tested on x86. Validate and test on:
 
 - [ ] ARM64 / AArch64 (server platforms with ECC)
 - [ ] PowerPC (IBM POWER systems)
@@ -81,13 +81,7 @@ Run a short calibration test at the start of every run to estimate completion ti
 
 ## 8. Sequential Rolling RAM Test
 
-Investigate testing RAM sequentially in chunks, so the total tested RAM exceeds what can be tested in a single pass:
-
-- Run memtester on chunk 1 (e.g., 25% of RAM), then chunk 2, etc.
-- Total coverage exceeds what a single test can address at once (limited by available RAM)
-- Useful for machines where you want to test close to 100% of physical RAM but can't lock it all simultaneously
-- Consider a `--rolling` or `--sequential` mode
-- Need to investigate whether the kernel reallocates the same physical pages across runs or whether this genuinely tests different physical memory
+**Out of scope.** Physical memory addressing requires kernel-level cooperation (`move_pages()`, custom module walking `page_struct`). Userspace `mmap`/`malloc` + `mlock` provides no control over which physical frames are allocated, so freeing and reallocating cannot guarantee coverage of different physical memory.
 
 ## 9. Single Binary: Port to C and Integrate with memtester
 

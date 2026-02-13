@@ -2,7 +2,7 @@
 
 ## How fast is pmemtester compared to stressapptest?
 
-pmemtester parallelises memtester across all physical CPU cores, reducing wall-clock time proportionally up to memory bandwidth saturation. On a system with 16 physical cores testing 64 GB, pmemtester completes in ~20 minutes (1 loop) versus ~5 hours for a single memtester instance. stressapptest runs for a user-specified duration (typically 60s-2hrs) and reports aggregate throughput in its output (hardware-dependent; run `stressapptest -s 60` to measure yours). No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing. Aggregate memory bandwidth saturates at 3-5 cores on a typical dual-channel system. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads (see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread)).
+pmemtester parallelises memtester across all CPU cores, reducing wall-clock time proportionally up to memory bandwidth saturation. On a system with 16 physical cores testing 64 GB, pmemtester completes in ~20 minutes (1 loop) versus ~5 hours for a single memtester instance. stressapptest runs for a user-specified duration (typically 60s-2hrs) and reports aggregate throughput in its output (hardware-dependent; run `stressapptest -s 60` to measure yours). No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing. Aggregate memory bandwidth saturates at 3-5 cores on a typical dual-channel system. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads (see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread)).
 
 | Tool | Configuration | ~Time for 64 GB |
 |------|--------------|-----------------|
@@ -21,7 +21,7 @@ memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pas
 | **Test method** | 15 deterministic pattern tests (~2,590 sweeps/loop) | Randomized block copies with CRC |
 | **Primary focus** | RAM stick defects (cell-level faults) | Memory subsystem under stress (controller, bus) |
 | **Targets** | Stuck bits, coupling faults, address decoder faults | Bus/interface timing, signal integrity |
-| **Threading** | 1 memtester per physical core | 2 threads per CPU (auto) |
+| **Threading** | 1 memtester per core | 2 threads per CPU (auto) |
 | **ECC/EDAC detection** | Yes (before/after comparison) | No |
 | **Throughput** | ~8-10 GB/s per core on Xeon; ~15-20 GB/s on desktop/AMD | Hardware-dependent (stressapptest reports MB/s in output) |
 | **Duration** | Fixed (per-loop completion) | User-specified (continuous) |
@@ -91,12 +91,12 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 
 | Feature | memtester | stressapptest | stress-ng | pmemtester |
 |---------|-----------|---------------|-----------|------------|
-| Concurrency | Single-threaded | Multi-threaded (1 per core) | Massively parallel (N workers) | 1 memtester per physical core |
+| Concurrency | Single-threaded | Multi-threaded (1 per core) | Massively parallel (N workers) | 1 memtester per core |
 | Memory locking | `mlock` (may fail silently) | `mlock` on large allocations | `mlock`, `mmap`, `memfd`, etc. | `mlock` with pre-validation (`check_memlock_sufficient`) |
 | DMA / bus stress | None — pure CPU-to-RAM | High — disk/network threads stress the bus | Variable — can stress I/O and RAM simultaneously | None — pure CPU-to-RAM (parallel) |
 | ECC/EDAC detection | No | No | No | Yes — before/after EDAC counter comparison |
 | Pattern depth per location | ~2,590 sweeps/loop | Statistical (CRC-verified) | Configurable | ~2,590 sweeps/loop |
-| Bus saturation | ~15-25% of peak | ~80-90% of peak | Variable | ~80-95% of peak |
+| Bus saturation | ~15-25% of peak ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/)) | ~75-85% of peak | Variable | ~75-90% of peak ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/)) |
 | Verification | Immediate after each write | Asynchronous CRC checksum | Immediate or checksum | Immediate after each write |
 | CLI complexity | Simple: `memtester 10G` | Moderate: `stressapptest -W -s 60 -M 10000` | Complex: `stress-ng --vm 4 --vm-bytes 90%` | Simple: `pmemtester --percent 90` |
 
@@ -179,7 +179,7 @@ References: [Schroeder et al., "DRAM Errors in the Wild" (2009)](https://cacm.ac
 
 ## Why does parallel memtester help?
 
-A single memtester thread cannot saturate a modern memory bus. CPU cores have a limited number of outstanding memory requests (Line Fill Buffers), so one thread typically achieves only 15-25% of peak memory bandwidth on a server CPU ([STREAM benchmark data](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/)). Running multiple instances in parallel fills more memory channels simultaneously and reaches ~80% of peak bandwidth with around 10 threads on current x86 hardware -- roughly a **4-7x speedup** over a single thread on one socket.
+A single memtester thread cannot saturate a modern memory bus. CPU cores have a limited number of outstanding memory requests (Line Fill Buffers), so one thread typically achieves only 15-25% of peak memory bandwidth on a server CPU ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/), [McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). Running multiple instances in parallel fills more memory channels simultaneously and reaches 75-90% of peak bandwidth with around 10 threads on current x86 hardware ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/), [Hager 2018](https://blogs.fau.de/hager/archives/8263)) -- roughly a **4-7x speedup** over a single thread on one socket.
 
 On multi-socket systems, pmemtester's per-core parallelism also keeps memory accesses NUMA-local. A single memtester process testing both sockets would pay a cross-socket bandwidth penalty (see below), while pmemtester's many independent instances naturally access memory local to the core they run on.
 
