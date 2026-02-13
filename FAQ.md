@@ -435,3 +435,97 @@ References: [numactl(8)](https://linux.die.net/man/8/numactl), [migratepages(8)]
 ## Why not drop caches before running?
 
 `MemAvailable` in `/proc/meminfo` already accounts for reclaimable page cache and reclaimable slab (dentries/inodes) -- the kernel will evict these as needed when memtester allocates memory. Dropping caches (`echo 3 > /proc/sys/vm/drop_caches`) before running is unnecessary because the kernel reclaims clean cache pages on demand under allocation pressure. `MemAvailable` is deliberately conservative (it subtracts low watermarks and counts only half of reclaimable slab to account for fragmentation), so the actual reclaimable memory is slightly higher than the estimate -- but this works in pmemtester's favour, not against it. The practical outcome is the same whether you drop caches or not. Note that `drop_caches` only releases *clean* pages -- dirty pages (modified but not yet written to disk) are kept. If you did want to maximise free memory manually, you would need to run `sync` first to flush dirty pages to disk, converting them to clean pages that `drop_caches` can then release. But again, the kernel handles all of this automatically under allocation pressure, so neither `sync` nor `drop_caches` is needed before running pmemtester.
+
+## What happens when Linux encounters an ECC uncorrectable error?
+
+An uncorrectable error (UE) means the memory controller detected corruption it cannot fix. Unlike a correctable error (CE), where ECC silently repairs the data, a UE means the data is lost. What the kernel does depends on how the error was detected and what the corrupted memory was being used for.
+
+### How the hardware reports UEs
+
+The CPU classifies uncorrectable errors into three categories (Intel terminology; AMD is broadly similar):
+
+| Type | Meaning | Signal | Severity |
+|------|---------|--------|----------|
+| **SRAR** (Action Required) | CPU consumed or is about to consume corrupted data | Machine Check Exception (#MC) | Highest — recovery mandatory before execution can resume |
+| **SRAO** (Action Optional) | Corruption detected but not consumed (e.g., patrol scrub) | #MC or CMCI | Medium — processor state is valid, page can be retired proactively |
+| **UCNA** (No Action) | Corruption detected in background, not consumed | CMCI (not #MC) | Lowest — informational, page can be poisoned preventively |
+
+The distinction matters because a patrol scrub UE (SRAO/UCNA) is detected *before* any process reads the bad data, giving the kernel a chance to retire the page transparently. A consumed UE (SRAR) means a process already has or is about to use corrupted data.
+
+### The kernel's decision tree
+
+When the MCE handler runs, it classifies the error via `mce_severity()` and routes to one of these outcomes:
+
+**Kernel panic** — when any of these are true:
+- Processor Context Corrupt (PCC) bit is set in MCA status — the CPU's own state is unreliable
+- No Restart IP available while in kernel mode — the kernel cannot resume
+- `CONFIG_MEMORY_FAILURE` is not enabled — the kernel has no recovery mechanism
+- The corrupted page belongs to a kernel slab object, page table, or other internal data structure that cannot be recovered
+
+**Page poisoned and retired** — when `CONFIG_MEMORY_FAILURE` is enabled (all major distros enable this by default) and the page type is recoverable. The kernel:
+1. Sets the `PG_hwpoison` flag on the page, permanently excluding it from future allocation
+2. Unmaps the page from all processes that had it mapped
+3. Executes a page-type-specific handler (see recovery table below)
+
+**Process signalled** — affected processes receive `SIGBUS`:
+- `BUS_MCEERR_AR` (Action Required): synchronous, delivered to the thread that consumed the corrupted data. Means "you used bad data, handle this now or die."
+- `BUS_MCEERR_AO` (Action Optional): asynchronous, delivered to processes that have the page mapped but haven't consumed it yet. Only sent to processes that opted into early notification via `prctl(PR_MCE_KILL_EARLY)` or the `vm.memory_failure_early_kill` sysctl.
+
+### Recovery by page type
+
+| Page type | What happens | Data lost? |
+|-----------|-------------|------------|
+| **Clean file-backed** (page cache) | Kernel drops the page and re-reads from disk on next access | No |
+| **Dirty file-backed** (page cache) | Page truncated; `fsync()`/`write()` returns `-EIO` to notify application | Yes — unflushed writes are lost |
+| **Anonymous** (heap, stack) | Page unmapped; process gets SIGBUS on next access (or immediately if early-kill) | Yes — no backing store |
+| **Clean swap cache** | Removed from swap cache; swap slot still has valid data | No |
+| **Dirty swap cache** | Dirty bit cleared; process killed lazily on swap-in | Yes |
+| **HugeTLB** | Entire huge page unmapped from all processes | Yes (for mapped data) |
+| **THP** (Transparent Huge Page) | Split to 4K pages first, then only the poisoned page is retired | Only the affected 4K region |
+| **KSM** (merged page) | All processes sharing the merged page are signalled; page unmerged | Yes |
+| **Kernel internal** (slab, page tables) | Not recoverable — kernel panic | N/A |
+
+### Patrol scrub vs consumed errors
+
+Patrol scrub (background memory scrubbing by the memory controller) can detect UEs proactively — before any process reads the bad data. These are reported as SRAO or UCNA, and the kernel can poison the page and unmap it transparently. No process needs to be killed if the page is a clean file-backed page or if no process has accessed it yet. This is the best-case scenario for a UE.
+
+A consumed UE (SRAR) means a process already tried to use the corrupted data. The kernel must signal the process immediately. For anonymous pages (heap/stack), the data is unrecoverable and the process must handle SIGBUS or be killed.
+
+### Early kill vs late kill
+
+The kernel supports two policies for notifying processes about poisoned pages they have mapped but haven't consumed yet:
+
+- **Late kill** (default): No signal until the process actually accesses the poisoned page. At that point it gets `BUS_MCEERR_AR`. This minimises unnecessary process kills — the process may never touch that page again.
+- **Early kill**: `BUS_MCEERR_AO` is sent immediately to all processes mapping the page. Enable per-process with `prctl(PR_MCE_KILL_EARLY)` or system-wide with `sysctl vm.memory_failure_early_kill=1`.
+
+### Can applications survive a UE?
+
+In theory, yes — a process can install a `SIGBUS` handler and use `siglongjmp()` to recover. In practice, almost no applications do this. The one major exception is **QEMU/KVM**, which intercepts `BUS_MCEERR_AR`/`BUS_MCEERR_AO` and injects a virtual MCE into the guest VM, letting the guest OS handle the error. No major database (PostgreSQL, MySQL, Oracle) or JVM implements MCE-aware SIGBUS recovery — a hardware UE in their memory crashes the process.
+
+### The tolerant sysctl
+
+The `tolerant` sysctl (`/sys/devices/system/edac/mc/mc*/tolerant` or the x86 MCE `tolerant` parameter) controls panic policy:
+
+| Value | Behaviour |
+|-------|-----------|
+| 0 | Always panic on any uncorrected error |
+| 1 | Attempt recovery; panic if not possible (default) |
+| 2 | Log and continue when possible (permissive) |
+| 3 | Never panic, log only (dangerous — risks silent corruption) |
+
+### Monitoring tools
+
+**mcelog** is deprecated. It relied on `CONFIG_X86_MCELOG_LEGACY`, deprecated since Linux 4.12 (2017), and does not support modern AMD processors. Use **rasdaemon**, which reads the modern EDAC tracing subsystem and records events to the systemd journal and optionally SQLite. Query with `ras-mc-ctl --error-count` or `ras-mc-ctl --summary`.
+
+### What this means for pmemtester
+
+pmemtester monitors EDAC counters (`/sys/devices/system/edac/mc/`) before and after the test. If a UE occurs during a pmemtester run:
+
+1. The kernel's MCE handler fires and may kill one or more memtester processes (SRAR) or poison the page proactively (SRAO/UCNA)
+2. pmemtester detects the killed process via its non-zero exit code
+3. pmemtester's EDAC after-snapshot shows increased UE counters compared to the before-snapshot
+4. Both signals contribute to a FAIL verdict
+
+The EDAC check catches errors that memtester's own exit code might miss — for example, if a UE occurs in memory not currently under test, or if a patrol scrub detects a UE that was poisoned and retired without killing any memtester process.
+
+References: [HWPoison kernel documentation](https://docs.kernel.org/mm/hwpoison.html), [HWPOISON (LWN.net, Andi Kleen, 2009)](https://lwn.net/Articles/348886/), [Machine check recovery when kernel accesses poison (LWN.net, 2015)](https://lwn.net/Articles/671301/), [mm/memory-failure.c (kernel source)](https://github.com/torvalds/linux/blob/master/mm/memory-failure.c), [arch/x86/kernel/cpu/mce/core.c (kernel source)](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/mce/core.c), [rasdaemon repository](https://github.com/mchehab/rasdaemon).
