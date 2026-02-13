@@ -2,7 +2,7 @@
 
 ## How fast is pmemtester compared to stressapptest?
 
-pmemtester parallelises memtester across all physical CPU cores, reducing wall-clock time proportionally up to memory bandwidth saturation. On a system with 16 physical cores testing 64 GB, pmemtester completes in ~20 minutes (1 loop) versus ~5 hours for a single memtester instance. stressapptest runs for a user-specified duration (typically 60s-2hrs) and reports ~10,000-14,000 MB/s aggregate throughput on a 16-core x86 server. No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing. Aggregate memory bandwidth saturates at 3-5 cores on a typical dual-channel system. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads (see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread)).
+pmemtester parallelises memtester across all physical CPU cores, reducing wall-clock time proportionally up to memory bandwidth saturation. On a system with 16 physical cores testing 64 GB, pmemtester completes in ~20 minutes (1 loop) versus ~5 hours for a single memtester instance. stressapptest runs for a user-specified duration (typically 60s-2hrs) and reports aggregate throughput in its output (hardware-dependent; run `stressapptest -s 60` to measure yours). No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing. Aggregate memory bandwidth saturates at 3-5 cores on a typical dual-channel system. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads (see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread)).
 
 | Tool | Configuration | ~Time for 64 GB |
 |------|--------------|-----------------|
@@ -14,7 +14,7 @@ References: [memtester 64 GB timing estimate (GitHub issue #2)](https://github.c
 
 ## What does pmemtester test that stressapptest doesn't (and vice versa)?
 
-memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pass, targeting stuck bits and coupling faults with exhaustive patterns (stuck address, walking ones/zeroes, bit flip, checkerboard, etc.). Raw memory throughput is ~8,600 MB/s on a single modern core, but the thoroughness is what makes it slow per-byte-tested. stressapptest uses randomized block copies with CRC verification, targeting memory bus and interface timing issues (signal integrity, timing margins). It moves more data per second but tests fewer distinct bit patterns per memory location. The tools are complementary rather than directly comparable -- they detect different fault types. Additionally, pmemtester integrates EDAC error detection, which neither memtester nor stressapptest does on its own.
+memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pass, targeting stuck bits and coupling faults with exhaustive patterns (stuck address, walking ones/zeroes, bit flip, checkerboard, etc.). Single-core throughput is limited by the CPU's L1D miss concurrency (Line Fill Buffers), which caps a single thread at ~8-10 GB/s on Intel Xeon server parts or ~15-20 GB/s on desktop/AMD parts with effective prefetching ([McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). memtester's non-sequential write-read-compare patterns get minimal prefetcher benefit, so throughput sits near the lower end of this range. stressapptest uses randomized block copies with CRC verification, targeting memory bus and interface timing issues (signal integrity, timing margins). It moves more data per second but tests fewer distinct bit patterns per memory location. The tools are complementary rather than directly comparable -- they detect different fault types. Additionally, pmemtester integrates EDAC error detection, which neither memtester nor stressapptest does on its own.
 
 | | pmemtester | stressapptest |
 |---|---|---|
@@ -23,11 +23,11 @@ memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pas
 | **Targets** | Stuck bits, coupling faults, address decoder faults | Bus/interface timing, signal integrity |
 | **Threading** | 1 memtester per physical core | 2 threads per CPU (auto) |
 | **ECC/EDAC detection** | Yes (before/after comparison) | No |
-| **Throughput** | ~8,600 MB/s per core (single-threaded) | ~10,000-14,000 MB/s aggregate (16-core x86) |
+| **Throughput** | ~8-10 GB/s per core on Xeon; ~15-20 GB/s on desktop/AMD | Hardware-dependent (stressapptest reports MB/s in output) |
 | **Duration** | Fixed (per-loop completion) | User-specified (continuous) |
 | **Patterns per location** | ~2,590 per loop | Randomized (statistical coverage) |
 
-References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [memtester source: sizes.h](https://github.com/jnavila/memtester/blob/master/sizes.h), [stressapptest repository](https://github.com/stressapptest/stressapptest), [Google Open Source Blog: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html).
+References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [memtester source: sizes.h](https://github.com/jnavila/memtester/blob/master/sizes.h), [stressapptest repository](https://github.com/stressapptest/stressapptest), [Google Open Source Blog: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [McCalpin: Single-core memory bandwidth (2025)](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/).
 
 ## How do memtester, stressapptest, and stress-ng find errors differently?
 
@@ -42,7 +42,7 @@ memtester allocates a buffer, locks it into RAM with `mlock`, and runs 15 patter
 - **Bit Flip**: Writes a value, reads back, flips all bits, writes, reads back. Catches coupling faults where adjacent cells influence each other.
 - **Checkerboard / Bit Spread / Block Move**: Pattern variations that exercise different physical cell adjacency relationships.
 
-Total: ~2,590 buffer sweeps per loop, ~8,600 MB/s throughput on a single modern core.
+Total: ~2,590 buffer sweeps per loop. Throughput is bounded by single-core memory bandwidth (~8-10 GB/s on Intel Xeon without prefetcher benefit, ~15-20 GB/s on desktop/AMD parts; [McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). memtester's non-sequential access patterns get minimal prefetching, so expect the lower end.
 
 **Strength**: Exhaustive per-location pattern coverage. Finds hard faults (permanently damaged silicon) reliably.
 
