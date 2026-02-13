@@ -278,10 +278,6 @@ pmemtester uses `lscpu -b -p=Socket,Core` to enumerate unique physical cores acr
 
 If `lscpu` is unavailable (minimal containers, embedded systems), pmemtester falls back to `nproc`, which returns hardware threads. This is a conservative fallback -- more processes than needed, but functional.
 
-### When per-thread would be better
-
-Per-thread (the old default) only wins if the workload has significant compute phases that benefit from SMT (memtester does not), or if you want to guarantee every logical CPU has work to prevent scheduler migration entirely. For explicit control, use the planned `--threads N` option (see [TODO.md](TODO.md#cores-vs-threads)).
-
 ## Which Linux distros support EDAC?
 
 Nearly all major distros enable `CONFIG_EDAC=y` (built-in) with hardware drivers as loadable modules:
