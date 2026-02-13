@@ -56,7 +56,18 @@ pmemtester uses `lscpu -b -p=Socket,Core` to detect physical cores (with `nproc`
 - Consider adding a `--threads N` override for users who want explicit control over the number of memtester instances
 - This would allow testing with fewer processes (e.g., single-socket on a dual-socket system) or more (e.g., matching hardware threads for scheduler saturation experiments)
 
-## 6. Time Estimation
+## 6. Thread Pinning
+
+Pin each memtester instance to a specific physical core with `taskset` or `sched_setaffinity`:
+
+- Eliminates scheduler migration entirely -- each memtester stays on its assigned core for the full run
+- Guarantees NUMA-local memory access (combined with `numactl --membind` or `mbind`)
+- Makes results reproducible across runs (same core-to-memory mapping every time)
+- Enables per-core performance comparison (identify a weak core or memory channel)
+- Could use `lscpu -b -p=Socket,Core,CPU` to map physical cores to logical CPU IDs for pinning
+- Consider a `--pin` flag to enable pinning (off by default to avoid surprising users)
+
+## 7. Time Estimation
 
 Run a short calibration test at the start of every run to estimate completion time:
 
@@ -68,7 +79,7 @@ Run a short calibration test at the start of every run to estimate completion ti
 - The calibration run also serves as a quick sanity check that memtester works before committing to a long run
 - Consider caching calibration results per-host (MB/s throughput) to skip the sample on subsequent runs
 
-## 7. Sequential Rolling RAM Test
+## 8. Sequential Rolling RAM Test
 
 Investigate testing RAM sequentially in chunks, so the total tested RAM exceeds what can be tested in a single pass:
 
@@ -78,7 +89,7 @@ Investigate testing RAM sequentially in chunks, so the total tested RAM exceeds 
 - Consider a `--rolling` or `--sequential` mode
 - Need to investigate whether the kernel reallocates the same physical pages across runs or whether this genuinely tests different physical memory
 
-## 8. Single Binary: Port to C and Integrate with memtester
+## 9. Single Binary: Port to C and Integrate with memtester
 
 Rewrite pmemtester as a C program that integrates memtester's testing logic directly, producing a single `pmemtester` executable with no external dependency on the `memtester` binary.
 
@@ -103,7 +114,7 @@ Considerations:
 - Cross-platform portability: memtester supports non-Linux systems; pmemtester is Linux-only (EDAC dependency)
 - Build system: autotools or meson, with the test suite ported from bats to a C test framework or kept as integration tests
 
-## 9. FAQ
+## 10. FAQ
 
 Add more items to [FAQ.md](FAQ.md). Candidate topics:
 

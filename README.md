@@ -332,7 +332,7 @@ See [TODO.md](TODO.md) for planned improvements including EDAC region correlatio
 
 | Tool | Environment | Parallel | ECC CE Detection | Active | License |
 |------|-------------|----------|-----------------|--------|---------|
-| **pmemtester** | Userspace (Bash) | Yes (1 per core) | **Yes** (EDAC before/after) | Yes (v0.2, 2026) | GPL-2.0 |
+| **pmemtester** | Userspace (Bash) | Yes | **Yes** (EDAC before/after) | Yes (v0.2, 2026) | GPL-2.0 |
 | memtester | Userspace | No | No | Yes (v4.7.1, 2024) | GPL-2.0 |
 | MemTest86 (PassMark) | Standalone boot | Yes | **Yes** (direct HW polling, per-DIMM) | Yes (v11.6, 2026) | Proprietary freeware |
 | Memtest86+ | Standalone boot | Yes | **Partial** (AMD Ryzen only, manual recompile) | Yes (v8.0, 2025) | GPL-2.0 |
