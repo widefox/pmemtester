@@ -8,13 +8,13 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) -- t
 
 ## Features
 
-- Runs one memtester instance per CPU thread to saturate the memory bus on any system
-- Extra threads may help the memory controller interleave across banks and cover OS scheduling gaps
+- Runs one memtester instance per physical CPU core to saturate the memory bus on any system
+- Runs one memtester per physical core, maximising memory bandwidth without SMT contention regression (see [FAQ](FAQ.md#why-one-memtester-per-core-instead-of-one-per-thread))
 - Configurable RAM percentage (default 90% of available)
 - RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
 - Linux EDAC hardware error detection (before/after comparison)
-- Per-thread logging with aggregated master log
+- Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester results and EDAC checks
 
 ## Quick Start
@@ -55,9 +55,9 @@ The `--memtester-dir` default may differ on distro-packaged installations (see [
 
 ## Why Parallel?
 
-A single memtester thread cannot saturate a modern memory bus -- one thread typically achieves only 15-25% of peak memory bandwidth. Running one instance per CPU thread fills more memory channels simultaneously, reaching ~80% of peak bandwidth and giving a **4-7x speedup** per socket. On multi-socket systems, pmemtester's per-thread parallelism also keeps memory accesses NUMA-local, adding a further **1.4-2x** benefit over a non-NUMA-aware approach.
+A single memtester thread cannot saturate a modern memory bus -- one thread typically achieves only 15-25% of peak memory bandwidth. Running one instance per physical CPU core fills more memory channels simultaneously, reaching ~80-95% of peak bandwidth and giving a **4-7x speedup** per socket. On multi-socket systems, pmemtester's per-core parallelism also keeps memory accesses NUMA-local, adding a further **1.4-2x** benefit over a non-NUMA-aware approach.
 
-See [FAQ.md](FAQ.md#why-does-parallel-memtester-help) for detailed per-platform speedup tables, NUMA penalty measurements, methodology, and [why per-thread is better than per-core](FAQ.md#why-one-memtester-per-thread-instead-of-one-per-core).
+See [FAQ.md](FAQ.md#why-does-parallel-memtester-help) for detailed per-platform speedup tables, NUMA penalty measurements, methodology, and [why per-core is better than per-thread](FAQ.md#why-one-memtester-per-core-instead-of-one-per-thread).
 
 ## Use Cases
 
@@ -105,7 +105,7 @@ lib/
 ├── cli.sh                      # Argument parsing and validation
 ├── math_utils.sh               # Integer arithmetic utilities
 ├── unit_convert.sh             # kB/MB/bytes conversions
-├── system_detect.sh            # RAM and thread count detection
+├── system_detect.sh            # RAM and core count detection
 ├── memtester_mgmt.sh           # Find and validate memtester binary
 ├── memlock.sh                  # Kernel memory lock management
 ├── edac.sh                     # EDAC message/counter monitoring
@@ -162,7 +162,7 @@ pmemtester creates a log directory at `/tmp/pmemtester.<PID>/` (or `--log-dir`):
 ### master.log contents
 
 ```text
-[2026-02-10 14:30:01] [INFO] Starting pmemtester: 3584MB x 4 threads
+[2026-02-10 14:30:01] [INFO] Starting pmemtester: 3584MB x 4 cores
 --- Thread 0 ---
 [2026-02-10 14:30:01] [INFO] memtester 3584M started (PID 12346)
 [2026-02-10 14:35:22] [INFO] memtester 3584M completed (exit 0)
@@ -193,7 +193,7 @@ With `--log-dir /tmp/memtest-run`:
 $ sudo pmemtester --percent 80 --log-dir /tmp/memtest-run
 PASS
 $ cat /tmp/memtest-run/master.log
-[2026-02-10 14:30:01] [INFO] Starting pmemtester: 3072MB x 8 threads
+[2026-02-10 14:30:01] [INFO] Starting pmemtester: 3072MB x 8 cores
 --- Thread 0 ---
 [2026-02-10 14:30:01] [INFO] memtester 3072M completed (exit 0)
 --- Thread 1 ---
@@ -212,7 +212,7 @@ FAIL
 $ echo $?
 1
 $ cat /tmp/pmemtester.54321/master.log
-[2026-02-10 15:00:01] [INFO] Starting pmemtester: 3584MB x 4 threads
+[2026-02-10 15:00:01] [INFO] Starting pmemtester: 3584MB x 4 cores
 --- Thread 0 ---
 [2026-02-10 15:00:01] [INFO] memtester 3584M completed (exit 0)
 --- Thread 1 ---
@@ -234,7 +234,7 @@ FAIL
 $ echo $?
 1
 $ cat /tmp/pmemtester.54322/master.log
-[2026-02-10 16:00:01] [INFO] Starting pmemtester: 3584MB x 4 threads
+[2026-02-10 16:00:01] [INFO] Starting pmemtester: 3584MB x 4 cores
 --- Thread 0 ---
 [2026-02-10 16:00:01] [INFO] memtester 3584M completed (exit 0)
 --- Thread 1 ---
@@ -257,14 +257,14 @@ In this case all memtester processes passed, but 3 correctable ECC errors (ce_co
 
 ```workflow
 parse_args --> validate_args --> find_memtester --> calculate_test_ram_kb
-    --> get_thread_count --> divide_ram_per_thread_mb --> check_memlock_sufficient
+    --> get_core_count --> divide_ram_per_core_mb --> check_memlock_sufficient
     --> init_logs --> [EDAC before] --> run_all_memtesters --> wait_and_collect
     --> [EDAC after] --> aggregate_logs --> PASS/FAIL
 ```
 
 ## Testing
 
-189 tests (164 unit + 25 integration).
+194 tests (167 unit + 27 integration).
 
 ```bash
 make test              # Run all tests (unit + integration)
@@ -308,7 +308,7 @@ Distributions that package memtester (all install to `/usr/bin/memtester`):
 
 - **memtester** binary (not bundled) -- [pyropus.ca](https://pyropus.ca./software/memtester/)
 - Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
-- `nproc` (from coreutils)
+- `lscpu` (from util-linux; falls back to `nproc` from coreutils)
 - EDAC support (optional -- gracefully skipped if absent)
 - For testing: bats 1.13.0+, kcov 38+ (v35 cannot trace `source`d files in bats; build from [source](https://github.com/SimonKagstrom/kcov) if needed), shellcheck 0.10.0+
 
@@ -326,13 +326,13 @@ Nearly all major distros enable `CONFIG_EDAC=y` with hardware drivers as modules
 
 ## Roadmap
 
-See [TODO.md](TODO.md) for planned improvements including EDAC error classification (CE vs UE), multi-architecture validation, NUMA locality, heterogeneous core handling, and core vs thread considerations.
+See [TODO.md](TODO.md) for planned improvements including EDAC region correlation, multi-architecture validation, NUMA locality, heterogeneous core handling, and core vs thread considerations.
 
 ## Linux Memory Testing Tools Comparison
 
 | Tool | Environment | Parallel | ECC CE Detection | Active | License |
 |------|-------------|----------|-----------------|--------|---------|
-| **pmemtester** | Userspace (Bash) | Yes (1 per thread) | **Yes** (EDAC before/after) | Yes (v0.1, 2026) | GPL-2.0 |
+| **pmemtester** | Userspace (Bash) | Yes (1 per core) | **Yes** (EDAC before/after) | Yes (v0.2, 2026) | GPL-2.0 |
 | memtester | Userspace | No | No | Yes (v4.7.1, 2024) | GPL-2.0 |
 | MemTest86 (PassMark) | Standalone boot | Yes | **Yes** (direct HW polling, per-DIMM) | Yes (v11.6, 2026) | Proprietary freeware |
 | Memtest86+ | Standalone boot | Yes | **Partial** (AMD Ryzen only, manual recompile) | Yes (v8.0, 2025) | GPL-2.0 |
@@ -346,9 +346,39 @@ See [TODO.md](TODO.md) for planned improvements including EDAC error classificat
 
 No userspace memory stress test tool detects ECC correctable errors on its own -- ECC hardware silently corrects single-bit errors before userspace reads the data. pmemtester is the first tool that combines pattern-based stress testing with EDAC error detection in a single package. The alternative is to run a stress tool while rasdaemon monitors EDAC counters separately.
 
+### Userspace vs bare-metal testing
+
+memtester and all other userspace tools (stressapptest, stress-ng, pmemtester) run inside the operating system and test virtual addresses. The OS controls which physical RAM pages back those addresses. This means userspace tools cannot test memory occupied by the kernel, drivers, or other processes — if a bad cell happens to hold kernel data, a userspace tester will never touch it. Bare-metal tools like MemTest86 boot without an OS and have direct access to nearly all physical memory, making them the gold standard for hardware validation.
+
+However, userspace testing has a complementary strength: it runs while the full system is active (GPU, network, disk I/O), creating a hotter, electrically noisier environment that can reveal marginal RAM that passes bare-metal tests at idle. memtester also relies on `mlock` to prevent the OS from swapping test patterns to disk — if mlock fails, the test may be exercising swap rather than RAM. pmemtester validates mlock limits before starting (`check_memlock_sufficient`) and its EDAC integration catches hardware errors that userspace reads cannot see, partially compensating for the virtual address limitation.
+
+References: [memtester homepage](https://pyropus.ca./software/memtester/), [MemTest86 technical overview](https://www.memtest86.com/tech_individual-test-descr.html), [Linux mlock(2) man page](https://linux.die.net/man/2/mlock).
+
+### Testing philosophy: microscope, hammer, chaos monkey
+
+Each major userspace tool takes a fundamentally different approach to finding memory problems:
+
+| Tool | Philosophy | Approach | Finds |
+|------|-----------|----------|-------|
+| **memtester** | Microscope | Sequential deterministic patterns (stuck address, walking ones/zeros, bit flip, checkerboard) — checks every address methodically | Dead cells, stuck bits, coupling faults, address decoder faults |
+| **stressapptest** | Hammer | Multi-threaded randomised block copies with CRC verification — floods the memory controller with concurrent traffic | Weak signals, timing margin failures, bus contention errors, power supply instability |
+| **stress-ng** | Chaos monkey | Multi-modal stressors (galpat, rowhammer, bit flip, paging storms) — stresses the entire memory subsystem including virtual memory and cache coherency | System-level memory management bugs, page table corruption, kernel interaction failures |
+
+**memtester** is single-threaded and predictable. It creates very little electrical noise, so a DIMM that is "mostly fine" but fails only when hot or when voltage drops slightly may pass. Google developed stressapptest specifically because deterministic tools were passing hardware that failed in production ([Google Open Source Blog](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html)).
+
+**stressapptest** spawns threads equal to the number of CPU cores, racing them against each other with randomised copies, bit inversions, and disk-to-RAM transfers. This maximises bus contention and creates ground bounce and signal interference, revealing electrically weak RAM. It is widely considered the best userspace tool for finding intermittent stability errors on DDR4/DDR5 systems.
+
+**stress-ng** can mimic memtester's patterns but adds OS-level chaos: forcing paging storms, exercising rowhammer patterns, and thrashing the virtual memory manager. It finds bugs where the memory subsystem interacts poorly with the kernel.
+
+pmemtester wraps memtester's thorough pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC monitoring (detecting hardware errors invisible to all three tools above).
+
+See [FAQ.md](FAQ.md#what-does-pmemtester-test-that-stressapptest-doesnt-and-vice-versa) for detailed algorithmic comparisons and throughput benchmarks.
+
+References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [stressapptest repository](https://github.com/stressapptest/stressapptest), [Google: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [stress-ng homepage](https://github.com/ColinIanKing/stress-ng), [stress-ng vm methods](https://wiki.ubuntu.com/Kernel/Reference/stress-ng).
+
 ## FAQ
 
-See [FAQ.md](FAQ.md) for frequently asked questions, including speed comparisons with stressapptest, testing methodology differences, hard vs soft errors, CE thresholds by vendor, CE-to-UE predictive research, and cache behaviour.
+See [FAQ.md](FAQ.md) for frequently asked questions, including algorithmic comparisons of memtester/stressapptest/stress-ng, speed benchmarks, hard vs soft errors, CE thresholds by vendor, CE-to-UE predictive research, and cache behaviour.
 
 ## See Also
 

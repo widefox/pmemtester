@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Repository:** https://github.com/widefox/pmemtester
 
-pmemtester is a parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) written in pure Bash. It runs multiple memtester instances in parallel (one per CPU thread), divides RAM equally among them, and validates results using both memtester exit codes and Linux EDAC hardware error detection.
+pmemtester is a parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) written in pure Bash. It runs multiple memtester instances in parallel (one per physical CPU core), divides RAM equally among them, and validates results using both memtester exit codes and Linux EDAC hardware error detection.
 
 ## Development Methodology
 
@@ -53,11 +53,11 @@ pmemtester                  # Main executable (thin orchestrator)
 lib/
 ├── math_utils.sh           # Integer arithmetic (ceiling_div, percentage_of, safe_multiply)
 ├── unit_convert.sh         # kB/MB/bytes conversions
-├── system_detect.sh        # RAM and thread count from /proc/meminfo and nproc
+├── system_detect.sh        # RAM and core count from /proc/meminfo and lscpu
 ├── memtester_mgmt.sh       # Find and validate memtester binary
 ├── memlock.sh              # Kernel memory lock limit checking and configuration
 ├── edac.sh                 # EDAC message/counter capture and comparison
-├── ram_calc.sh             # RAM allocation math (percentage, per-thread division)
+├── ram_calc.sh             # RAM allocation math (percentage, per-core division)
 ├── parallel.sh             # Background memtester launch, PID tracking, wait
 ├── logging.sh              # Per-thread and master log management
 └── cli.sh                  # Argument parsing and validation
@@ -65,12 +65,12 @@ lib/
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `find_memtester` → `calculate_test_ram_kb` → `get_thread_count` → `divide_ram_per_thread_mb` → `check_memlock_sufficient` → `init_logs` → (EDAC before) → `run_all_memtesters` → `wait_and_collect` → (EDAC after) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `find_memtester` → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `check_memlock_sufficient` → `init_logs` → (EDAC before) → `run_all_memtesters` → `wait_and_collect` → (EDAC after) → `aggregate_logs` → PASS/FAIL
 
 ### Test Infrastructure
 
 - **Framework**: bats-core 1.13.0 with bats-support and bats-assert (git submodules)
-- **Mocking**: PATH-prepend mock scripts for external commands (`memtester`, `nproc`, `dmesg`); environment variable overrides for files (`PROC_MEMINFO`, `EDAC_BASE`, `MOCK_ULIMIT_L`); function overrides for builtins (`_read_ulimit_l`)
+- **Mocking**: PATH-prepend mock scripts for external commands (`memtester`, `lscpu`, `nproc`, `dmesg`); environment variable overrides for files (`PROC_MEMINFO`, `EDAC_BASE`, `MOCK_ULIMIT_L`); function overrides for builtins (`_read_ulimit_l`)
 - **Fixtures**: `test/fixtures/` contains synthetic `/proc/meminfo` files and EDAC sysfs directory trees
 - **Coverage**: kcov 38+ with `--include-path=./lib,./pmemtester` (v35 cannot instrument bash `source`d files inside bats subshells; build from [source](https://github.com/SimonKagstrom/kcov) if distro version is too old)
 
@@ -88,12 +88,12 @@ Bash has no floating-point. All arithmetic must use integer math with careful at
 Default settings must never crash the host:
 - 90% default applies to *available* RAM, not total
 - Validate memory lock limits before attempting to lock
-- Handle edge cases (zero threads, insufficient RAM, missing memtester binary)
+- Handle edge cases (zero cores, insufficient RAM, missing memtester binary)
 - EDAC checking is skipped gracefully when sysfs is unavailable
 
 ### External Dependencies
 
 - `memtester` binary (not bundled)
 - Linux kernel with EDAC support (optional — gracefully skipped if absent)
-- Standard Linux utilities: `nproc`, `dmesg`, `awk`, `find`, `diff`
+- Standard Linux utilities: `lscpu`, `nproc` (fallback), `dmesg`, `awk`, `find`, `diff`
 - Test tools: `bats` (1.13.0+), `kcov` (38+), `shellcheck` (0.10.0+)

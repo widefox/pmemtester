@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pmemtester - Parallel wrapper for memtester
-# Version: 0.1
+# Version: 0.2
 # Author: Johnathon Weare <jrweare@gmail.com>
 # URL: https://github.com/widefox/pmemtester
 # SPDX-License-Identifier: GPL-2.0-only
@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # shellcheck disable=SC2034
-pmemtester_version="0.1"
+pmemtester_version="0.2"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
@@ -25,21 +25,21 @@ main() {
     memtester_path="$(find_memtester "$MEMTESTER_DIR")"
     validate_memtester "$memtester_path"
 
-    local ram_kb thread_count ram_per_thread_mb
+    local ram_kb core_count ram_per_core_mb
     ram_kb="$(calculate_test_ram_kb "$PERCENT" "$RAM_TYPE")"
-    thread_count="$(get_thread_count)"
-    ram_per_thread_mb="$(divide_ram_per_thread_mb "$ram_kb" "$thread_count")"
-    validate_ram_params "$PERCENT" "$thread_count" "$ram_per_thread_mb"
+    core_count="$(get_core_count)"
+    ram_per_core_mb="$(divide_ram_per_core_mb "$ram_kb" "$core_count")"
+    validate_ram_params "$PERCENT" "$core_count" "$ram_per_core_mb"
 
     local size_arg
-    size_arg="$(mb_to_memtester_arg "$ram_per_thread_mb")"
+    size_arg="$(mb_to_memtester_arg "$ram_per_core_mb")"
 
     check_memlock_sufficient "$ram_kb" || configure_memlock "$ram_kb"
 
     local log_dir="${LOG_DIR:-/tmp/pmemtester.$$}"
-    init_logs "$log_dir" "$thread_count"
+    init_logs "$log_dir" "$core_count"
 
-    log_master "Starting pmemtester: ${ram_per_thread_mb}MB x ${thread_count} threads" "$log_dir"
+    log_master "Starting pmemtester: ${ram_per_core_mb}MB x ${core_count} cores" "$log_dir"
 
     # EDAC before
     local edac_supported=0
@@ -50,7 +50,7 @@ main() {
     fi
 
     # Run memtesters
-    run_all_memtesters "$memtester_path" "$size_arg" "$ITERATIONS" "$thread_count" "$log_dir"
+    run_all_memtesters "$memtester_path" "$size_arg" "$ITERATIONS" "$core_count" "$log_dir"
     local memtester_result=0
     wait_and_collect "$log_dir" || memtester_result=1
 
@@ -68,7 +68,7 @@ main() {
         fi
     fi
 
-    aggregate_logs "$log_dir" "$thread_count"
+    aggregate_logs "$log_dir" "$core_count"
 
     # Final verdict
     # Build failure source for diagnostic output

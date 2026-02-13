@@ -49,25 +49,25 @@ setup() {
     assert_failure
 }
 
-@test "divide_ram_per_thread_mb 8 threads" {
-    run divide_ram_per_thread_mb 11059200 8
+@test "divide_ram_per_core_mb 8 cores" {
+    run divide_ram_per_core_mb 11059200 8
     assert_success
     assert_output "1350"
 }
 
-@test "divide_ram_per_thread_mb 4 threads" {
-    run divide_ram_per_thread_mb 204800 4
+@test "divide_ram_per_core_mb 4 cores" {
+    run divide_ram_per_core_mb 204800 4
     assert_success
     assert_output "50"
 }
 
-@test "divide_ram_per_thread_mb result too small fails" {
-    run divide_ram_per_thread_mb 512 2
+@test "divide_ram_per_core_mb result too small fails" {
+    run divide_ram_per_core_mb 512 2
     assert_failure
 }
 
-@test "divide_ram_per_thread_mb single thread" {
-    run divide_ram_per_thread_mb 11059200 1
+@test "divide_ram_per_core_mb single core" {
+    run divide_ram_per_core_mb 11059200 1
     assert_success
     assert_output "10800"
 }
@@ -87,12 +87,12 @@ setup() {
     assert_failure
 }
 
-@test "validate_ram_params zero threads fails" {
+@test "validate_ram_params zero cores fails" {
     run validate_ram_params 90 0 1350
     assert_failure
 }
 
-@test "validate_ram_params zero MB per thread fails" {
+@test "validate_ram_params zero MB per core fails" {
     run validate_ram_params 90 8 0
     assert_failure
 }

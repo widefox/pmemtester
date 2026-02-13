@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-only
 # RAM calculation for pmemtester
-# Determines how much RAM to test and how to divide it among threads.
+# Determines how much RAM to test and how to divide it among cores.
 # Requires: math_utils.sh, unit_convert.sh, system_detect.sh
 
 # calculate_test_ram_kb: calculate target test RAM in kB
@@ -24,27 +24,27 @@ calculate_test_ram_kb() {
     percentage_of "$base_kb" "$percent"
 }
 
-# divide_ram_per_thread_mb: divide total kB among threads, return MB per thread
-# Usage: divide_ram_per_thread_mb <total_kb> <num_threads>
-divide_ram_per_thread_mb() {
-    local total_kb="$1" num_threads="$2"
-    local per_thread_kb per_thread_mb
+# divide_ram_per_core_mb: divide total kB among cores, return MB per core
+# Usage: divide_ram_per_core_mb <total_kb> <num_cores>
+divide_ram_per_core_mb() {
+    local total_kb="$1" num_cores="$2"
+    local per_core_kb per_core_mb
 
-    per_thread_kb=$(( total_kb / num_threads ))
-    per_thread_mb=$(kb_to_mb "$per_thread_kb")
+    per_core_kb=$(( total_kb / num_cores ))
+    per_core_mb=$(kb_to_mb "$per_core_kb")
 
-    if [[ "$per_thread_mb" -eq 0 ]]; then
-        echo "ERROR: RAM per thread < 1 MB (${per_thread_kb} kB). Not enough RAM to test." >&2
+    if [[ "$per_core_mb" -eq 0 ]]; then
+        echo "ERROR: RAM per core < 1 MB (${per_core_kb} kB). Not enough RAM to test." >&2
         return 1
     fi
 
-    echo "$per_thread_mb"
+    echo "$per_core_mb"
 }
 
 # validate_ram_params: validate RAM calculation parameters
-# Usage: validate_ram_params <percent> <num_threads> <ram_per_thread_mb>
+# Usage: validate_ram_params <percent> <num_cores> <ram_per_core_mb>
 validate_ram_params() {
-    local percent="$1" num_threads="$2" ram_per_thread_mb="$3"
+    local percent="$1" num_cores="$2" ram_per_core_mb="$3"
 
     if [[ "$percent" -le 0 ]]; then
         echo "ERROR: percent must be > 0 (got ${percent})" >&2
@@ -54,12 +54,12 @@ validate_ram_params() {
         echo "ERROR: percent must be <= 100 (got ${percent})" >&2
         return 1
     fi
-    if [[ "$num_threads" -le 0 ]]; then
-        echo "ERROR: thread count must be > 0 (got ${num_threads})" >&2
+    if [[ "$num_cores" -le 0 ]]; then
+        echo "ERROR: core count must be > 0 (got ${num_cores})" >&2
         return 1
     fi
-    if [[ "$ram_per_thread_mb" -le 0 ]]; then
-        echo "ERROR: RAM per thread must be > 0 MB (got ${ram_per_thread_mb})" >&2
+    if [[ "$ram_per_core_mb" -le 0 ]]; then
+        echo "ERROR: RAM per core must be > 0 MB (got ${ram_per_core_mb})" >&2
         return 1
     fi
     return 0

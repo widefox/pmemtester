@@ -59,22 +59,46 @@ teardown() {
     assert_failure
 }
 
-@test "get_thread_count returns nproc value" {
-    create_mock nproc 'echo "8"'
-    run get_thread_count
+@test "get_core_count returns physical core count" {
+    create_mock lscpu 'echo "# Socket,Core"; echo "0,0"; echo "0,1"; echo "0,2"; echo "0,3"; echo "1,0"; echo "1,1"; echo "1,2"; echo "1,3"'
+    run get_core_count
     assert_success
     assert_output "8"
 }
 
-@test "get_thread_count single thread" {
-    create_mock nproc 'echo "1"'
-    run get_thread_count
+@test "get_core_count deduplicates SMT threads" {
+    create_mock lscpu 'echo "# Socket,Core"; echo "0,0"; echo "0,0"; echo "0,1"; echo "0,1"'
+    run get_core_count
+    assert_success
+    assert_output "2"
+}
+
+@test "get_core_count single core" {
+    create_mock lscpu 'echo "# Socket,Core"; echo "0,0"'
+    run get_core_count
     assert_success
     assert_output "1"
 }
 
-@test "get_thread_count nproc failure" {
+@test "get_core_count lscpu failure falls back to nproc" {
+    create_mock lscpu 'exit 1'
+    create_mock nproc 'echo "4"'
+    run get_core_count
+    assert_success
+    assert_output "4"
+}
+
+@test "get_core_count all methods fail" {
+    create_mock lscpu 'exit 1'
     create_mock nproc 'exit 1'
-    run get_thread_count
+    run get_core_count
     assert_failure
+}
+
+@test "get_core_count lscpu empty output falls back to nproc" {
+    create_mock lscpu 'echo "# Socket,Core"'
+    create_mock nproc 'echo "8"'
+    run get_core_count
+    assert_success
+    assert_output "8"
 }

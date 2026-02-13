@@ -26,7 +26,7 @@ pmemtester currently assumes x86 Linux. Validate and test on:
 Considerations:
 - memtester itself is portable C, so the wrapper should work anywhere memtester runs
 - EDAC sysfs interface is architecture-independent (`/sys/devices/system/edac/mc/`)
-- `/proc/meminfo` and `nproc` are available on all Linux architectures, but `MemAvailable` requires kernel 3.14+ (the default `--ram-type available` will fail on older kernels with "field 'MemAvailable' not found")
+- `/proc/meminfo`, `lscpu`, and `nproc` are available on all Linux architectures, but `MemAvailable` requires kernel 3.14+ (the default `--ram-type available` will fail on older kernels with "field 'MemAvailable' not found")
 - `ulimit -l` memory locking behavior may differ across platforms
 - EDAC_GHES (firmware-first) may be the only EDAC path on some ARM64 servers
 
@@ -34,8 +34,8 @@ Considerations:
 
 Document and potentially improve NUMA behaviour:
 
-- pmemtester currently uses `nproc` for thread count and lets the kernel allocate memory freely across NUMA nodes
-- Memory allocation is not NUMA-aware -- the kernel's default policy (local allocation) means each thread likely gets memory from its local node, but this is not guaranteed
+- pmemtester currently uses `lscpu` for core count and lets the kernel allocate memory freely across NUMA nodes
+- Memory allocation is not NUMA-aware -- the kernel's default policy (local allocation) means each process likely gets memory from its local node, but this is not guaranteed
 - For explicit per-node testing, users can wrap pmemtester with `numactl --cpunodebind=N --membind=N` (documented in README)
 - Consider adding a `--numa-node N` flag to constrain testing to a specific NUMA node natively
 - Consider adding a `--per-node` mode that tests each NUMA node sequentially and reports per-node results
@@ -49,14 +49,12 @@ pmemtester currently treats all CPU threads homogeneously:
 - Document this assumption and any edge cases (e.g., E-cores with smaller cache may exhibit different memory access patterns)
 - Consider whether thread pinning (`taskset`) to specific core types would improve test coverage or reproducibility
 
-## 5. Cores vs Threads
+## 5. Thread Override
 
-pmemtester uses `nproc` which returns the number of hardware threads (including SMT/HyperThreading), not physical cores:
+pmemtester uses `lscpu -b -p=Socket,Core` to detect physical cores (with `nproc` fallback), launching one memtester per physical core. This avoids SMT bandwidth regression measured at up to 3x on memory-bound workloads (see [FAQ.md](FAQ.md#why-one-memtester-per-core-instead-of-one-per-thread)).
 
-- On a 16-core/32-thread system, pmemtester launches 32 instances each with 1/32 of the test RAM
-- Using every thread rather than every core is unlikely to be faster for memtester (memory-bound workload), but it avoids issues with the kernel scheduler not equally loading all physical cores
-- More threads with smaller allocations may actually improve test coverage by exercising more memory controller interleaving patterns
-- Document this trade-off and consider an optional `--threads N` override for users who want explicit control
+- Consider adding a `--threads N` override for users who want explicit control over the number of memtester instances
+- This would allow testing with fewer processes (e.g., single-socket on a dual-socket system) or more (e.g., matching hardware threads for scheduler saturation experiments)
 
 ## 6. Time Estimation
 

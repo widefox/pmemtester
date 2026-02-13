@@ -15,8 +15,8 @@ exit 0
 MOCK
     chmod +x "${TEST_MEMTESTER_DIR}/memtester"
 
-    # Mock nproc to 2 threads
-    create_mock nproc 'echo "2"'
+    # Mock lscpu to report 2 physical cores (1 socket, 2 cores)
+    create_mock lscpu 'echo "# Socket,Core"; echo "0,0"; echo "0,1"'
 
     # Mock dmesg with clean EDAC output
     create_mock dmesg 'cat '"${FIXTURE_DIR}/edac_messages_clean.txt"
@@ -364,6 +364,29 @@ MOCK
     assert_failure
     assert_output --partial $'\033[31m'
     assert_output --partial "FAIL"
+}
+
+@test "full run log message says cores not threads" {
+    local log_dir="${TEST_LOG_DIR}/logs_cores"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir"
+    [[ -f "${log_dir}/master.log" ]]
+    grep -q "cores" "${log_dir}/master.log"
+    ! grep -q "threads" "${log_dir}/master.log"
+}
+
+@test "full run nproc fallback when lscpu unavailable" {
+    # Replace lscpu mock with one that fails
+    create_mock lscpu 'exit 1'
+    # Provide nproc mock
+    create_mock nproc 'echo "4"'
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR"
+    assert_success
+    assert_output --partial "PASS"
 }
 
 @test "full run CE with --allow-ce --color on shows yellow WARNING" {

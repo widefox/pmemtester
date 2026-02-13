@@ -2,7 +2,7 @@
 
 ## How fast is pmemtester compared to stressapptest?
 
-pmemtester parallelises memtester across all CPU threads, reducing wall-clock time proportionally up to memory bandwidth saturation. On a 16-thread system testing 64 GB, pmemtester completes in ~20 minutes (1 loop) versus ~5 hours for a single memtester instance. stressapptest runs for a user-specified duration (typically 60s-2hrs) and reports ~10,000-14,000 MB/s aggregate throughput on a 16-core x86 server. No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing. Memory bandwidth saturates at 3-5 cores on a typical dual-channel system; adding threads beyond that point causes contention and can regress throughput.
+pmemtester parallelises memtester across all physical CPU cores, reducing wall-clock time proportionally up to memory bandwidth saturation. On a system with 16 physical cores testing 64 GB, pmemtester completes in ~20 minutes (1 loop) versus ~5 hours for a single memtester instance. stressapptest runs for a user-specified duration (typically 60s-2hrs) and reports ~10,000-14,000 MB/s aggregate throughput on a 16-core x86 server. No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing. Aggregate memory bandwidth saturates at 3-5 cores on a typical dual-channel system. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads (see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread)).
 
 | Tool | Configuration | ~Time for 64 GB |
 |------|--------------|-----------------|
@@ -21,13 +21,109 @@ memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pas
 | **Test method** | 15 deterministic pattern tests (~2,590 sweeps/loop) | Randomized block copies with CRC |
 | **Primary focus** | RAM stick defects (cell-level faults) | Memory subsystem under stress (controller, bus) |
 | **Targets** | Stuck bits, coupling faults, address decoder faults | Bus/interface timing, signal integrity |
-| **Threading** | 1 memtester per CPU thread | 2 threads per CPU (auto) |
+| **Threading** | 1 memtester per physical core | 2 threads per CPU (auto) |
 | **ECC/EDAC detection** | Yes (before/after comparison) | No |
 | **Throughput** | ~8,600 MB/s per core (single-threaded) | ~10,000-14,000 MB/s aggregate (16-core x86) |
 | **Duration** | Fixed (per-loop completion) | User-specified (continuous) |
 | **Patterns per location** | ~2,590 per loop | Randomized (statistical coverage) |
 
 References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [memtester source: sizes.h](https://github.com/jnavila/memtester/blob/master/sizes.h), [stressapptest repository](https://github.com/stressapptest/stressapptest), [Google Open Source Blog: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html).
+
+## How do memtester, stressapptest, and stress-ng find errors differently?
+
+Each tool uses a fundamentally different algorithm, targeting different failure modes.
+
+### memtester: sequential deterministic patterns ("microscope")
+
+memtester allocates a buffer, locks it into RAM with `mlock`, and runs 15 pattern tests sequentially on that region. Each test writes a known pattern, reads it back, and compares:
+
+- **Stuck Address**: Writes the address itself to each location, then verifies. Catches shorted address lines (writing to address A accidentally writes to address B).
+- **Walking Ones / Walking Zeros**: Writes `00000001`, `00000010`, `00000100`, ... through each bit position. Catches individual dead capacitors (stuck-at-0 or stuck-at-1 faults).
+- **Bit Flip**: Writes a value, reads back, flips all bits, writes, reads back. Catches coupling faults where adjacent cells influence each other.
+- **Checkerboard / Bit Spread / Block Move**: Pattern variations that exercise different physical cell adjacency relationships.
+
+Total: ~2,590 buffer sweeps per loop, ~8,600 MB/s throughput on a single modern core.
+
+**Strength**: Exhaustive per-location pattern coverage. Finds hard faults (permanently damaged silicon) reliably.
+
+**Weakness**: Single-threaded and predictable. Creates very little electrical noise or bus contention. A DIMM that is electrically marginal (fails only when hot or under voltage stress) may pass.
+
+### stressapptest: randomised bandwidth saturation ("hammer")
+
+Developed by Google specifically because deterministic tools were passing hardware that failed in production. The algorithm is designed to maximise memory bus contention:
+
+- Spawns threads equal to the number of CPU cores
+- **Randomised Copy**: Thread A copies a large chunk from address X to address Y
+- **Invert**: Thread B reads from address Z, flips all bits, writes back
+- **Disk-to-RAM**: Thread C writes data to disk and reads it back into RAM (stresses the DMA bus)
+- Verification via CRC comparison after each operation
+
+The threads race against each other, forcing the memory controller to rapidly switch between reading, writing, and refreshing different rows. This creates ground bounce and signal interference at the electrical level.
+
+**Strength**: Maximises bus contention. Reveals electrically weak RAM that passes pattern-based tests. Widely considered the best userspace tool for DDR4/DDR5 intermittent stability errors.
+
+**Weakness**: Statistical coverage per location — does not verify every bit pattern at every address. May miss hard faults that require specific patterns to detect.
+
+### stress-ng: multi-modal OS stressor ("chaos monkey")
+
+A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patterns but add OS-level chaos:
+
+- **galpat** (Galloping Pattern): A neighbour-sensitive variant where each cell is verified while all other cells hold different values. Catches coupling faults that depend on the state of surrounding cells.
+- **rowhammer**: Specifically targets the rowhammer vulnerability by repeatedly accessing adjacent rows to induce bit flips in victim rows. Tests the DRAM's resistance to disturbance errors.
+- **flip**: Bit inversion patterns similar to memtester but with configurable aggression.
+- **Paging storms**: Forces the OS to swap memory in and out of disk, testing the RAM's ability to handle OS-level thrashing and page table management under extreme pressure.
+
+**Strength**: Finds bugs where the memory subsystem interacts poorly with the kernel (page table corruptions, TLB shootdown races, cache coherency failures). Tests the full stack, not just RAM cells.
+
+**Weakness**: Less focused than memtester (may not achieve the same per-location pattern depth) and less bandwidth-intensive than stressapptest (may not reveal marginal electrical issues).
+
+### Effectiveness by failure scenario
+
+| Scenario | memtester | stressapptest | stress-ng | pmemtester |
+|----------|-----------|---------------|-----------|------------|
+| **Dead capacitor (hard fault)** | Excellent — identifies the exact address | Good — may miss if random patterns don't hit the cell | Good — depends on stressor used | Excellent — memtester patterns + EDAC confirms hardware error |
+| **Overheating RAM** | Poor — generates very little heat or bus load | Excellent — saturates bandwidth, stresses thermal envelope | Very good — significant heat under multi-worker load | Good — parallel memtester generates moderate heat, less than stressapptest |
+| **Bad memory controller** | Poor — sequential single-threaded load is too light | Excellent — this is its primary design goal | Good — high concurrent load stresses controller | Good — parallel load stresses controller, not as randomised as stressapptest |
+| **Power supply / VRM instability** | Poor — low current draw | Excellent — large current transients reveal weak PSUs | Good — high sustained load | Good — parallel load draws more current than single memtester |
+| **Rowhammer vulnerability** | No | No | Yes — has specific rowhammer stressors | No (memtester does not target rowhammer) |
+
+### Feature comparison
+
+| Feature | memtester | stressapptest | stress-ng | pmemtester |
+|---------|-----------|---------------|-----------|------------|
+| Concurrency | Single-threaded | Multi-threaded (1 per core) | Massively parallel (N workers) | 1 memtester per physical core |
+| Memory locking | `mlock` (may fail silently) | `mlock` on large allocations | `mlock`, `mmap`, `memfd`, etc. | `mlock` with pre-validation (`check_memlock_sufficient`) |
+| DMA / bus stress | None — pure CPU-to-RAM | High — disk/network threads stress the bus | Variable — can stress I/O and RAM simultaneously | None — pure CPU-to-RAM (parallel) |
+| ECC/EDAC detection | No | No | No | Yes — before/after EDAC counter comparison |
+| Pattern depth per location | ~2,590 sweeps/loop | Statistical (CRC-verified) | Configurable | ~2,590 sweeps/loop |
+| Bus saturation | ~15-25% of peak | ~80-90% of peak | Variable | ~80-95% of peak |
+| Verification | Immediate after each write | Asynchronous CRC checksum | Immediate or checksum | Immediate after each write |
+| CLI complexity | Simple: `memtester 10G` | Moderate: `stressapptest -W -s 60 -M 10000` | Complex: `stress-ng --vm 4 --vm-bytes 90%` | Simple: `pmemtester --percent 90` |
+
+### Where pmemtester fits
+
+pmemtester wraps memtester's thorough 15-pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC hardware error monitoring (detecting errors invisible to all three tools). It is a "microscope with bus saturation" — deterministic patterns at near-peak memory bandwidth, plus hardware error detection.
+
+References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [stressapptest source](https://github.com/stressapptest/stressapptest), [Google: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [stress-ng vm stressors](https://wiki.ubuntu.com/Kernel/Reference/stress-ng), [stress-ng source: stress-vm.c](https://github.com/ColinIanKing/stress-ng/blob/master/stress-vm.c), [Kim et al., "Flipping Bits in Memory Without Accessing Them" (ISCA 2014, rowhammer)](https://users.ece.cmu.edu/~yoMDL/papers/kim-isca14.pdf).
+
+## Which tool should I use?
+
+**Diagnosing a suspected bad DIMM (random crashes, BSODs, kernel panics):**
+Boot into [Memtest86+](https://www.memtest.org/) from USB. Bare-metal testing has direct physical memory access and is the gold standard for hardware validation. No userspace tool can fully substitute because the OS reserves memory that userspace cannot test. If you must stay in the OS, use memtester (or pmemtester for parallelism + EDAC) — it is the most methodical at verifying individual cells.
+
+**Validating overclocking, new RAM timings, or cooling:**
+Use stressapptest. Run for 1 hour at full memory. If it passes, your voltage, timings, and cooling are stable. memtester is not useful here — you can pass 24 hours of memtester and crash in 5 minutes of a game because memtester does not generate enough bus contention or heat to expose marginal timings.
+
+**Server burn-in or production deployment validation:**
+Use pmemtester. It combines memtester's thorough cell-level testing with parallel bandwidth saturation and EDAC monitoring. The `--allow-ce` flag lets you distinguish between correctable errors (monitor and track) and uncorrectable errors (fail immediately). For maximum coverage, follow with a stressapptest run to exercise bus contention patterns that memtester's sequential approach does not cover.
+
+**Kernel development, OOM testing, swap stability:**
+Use stress-ng. It stresses the entire virtual memory stack — OOM killer behaviour, swap partition stability, page table management, cache coherency. Its rowhammer stressors are also the only userspace way to test DRAM disturbance error susceptibility.
+
+**Fleet-scale memory health monitoring (datacentres):**
+Use rasdaemon for continuous EDAC monitoring, with periodic pmemtester runs during maintenance windows. pmemtester's CE/UE classification and `--allow-ce` flag align with modern vendor guidance (see [CE thresholds](#how-many-correctable-errors-before-replacing-a-dimm)) that distinguishes correctable from uncorrectable errors rather than treating all EDAC events as failures.
+
+References: [Memtest86+ homepage](https://www.memtest.org/), [stressapptest repository](https://github.com/stressapptest/stressapptest), [stress-ng repository](https://github.com/ColinIanKing/stress-ng), [rasdaemon repository](https://github.com/mchehab/rasdaemon).
 
 ## What are hard errors vs soft errors?
 
@@ -85,7 +181,7 @@ References: [Schroeder et al., "DRAM Errors in the Wild" (2009)](https://cacm.ac
 
 A single memtester thread cannot saturate a modern memory bus. CPU cores have a limited number of outstanding memory requests (Line Fill Buffers), so one thread typically achieves only 15-25% of peak memory bandwidth on a server CPU ([STREAM benchmark data](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/)). Running multiple instances in parallel fills more memory channels simultaneously and reaches ~80% of peak bandwidth with around 10 threads on current x86 hardware -- roughly a **4-7x speedup** over a single thread on one socket.
 
-On multi-socket systems, pmemtester's per-thread parallelism also keeps memory accesses NUMA-local. A single memtester process testing both sockets would pay a cross-socket bandwidth penalty (see below), while pmemtester's many independent instances naturally access memory local to the core they run on.
+On multi-socket systems, pmemtester's per-core parallelism also keeps memory accesses NUMA-local. A single memtester process testing both sockets would pay a cross-socket bandwidth penalty (see below), while pmemtester's many independent instances naturally access memory local to the core they run on.
 
 | System | Channels | Speedup vs 1 thread |
 |--------|----------|---------------------|
@@ -142,56 +238,49 @@ This is why pmemtester's parallel design matters most on multi-socket systems: t
 - IBM POWER11 doubles to 32 DDR5 ports per chip via OMI. The E1180 scales to 16 sockets across 4 nodes (512 channels total).
 - POWER systems use OMI (a serialised memory interface) rather than direct DDR channels, providing equivalent or higher bandwidth in less die area.
 
-## Why one memtester per thread instead of one per core?
+## Why one memtester per core instead of one per thread?
 
-pmemtester launches one memtester instance per hardware thread (from `nproc`), not per physical core. On a 16-core/32-thread system, that means 32 instances. This is deliberate -- it avoids a scheduler problem that would make per-core launches slower and less predictable.
+pmemtester launches one memtester instance per physical CPU core (via `lscpu`), not per hardware thread. On a 16-core/32-thread system, that means 16 instances. This is deliberate -- SMT threads share the same core's memory pipeline and adding them causes measurable bandwidth regression for memory-bound workloads.
 
-### The scheduler problem with fewer processes than threads
+### SMT bandwidth regression
 
-If you launched 16 processes on 32 logical CPUs, the Linux scheduler would need to distribute them evenly -- but load balancing is periodic, not instantaneous. This applies to both CFS (< 6.6) and the EEVDF scheduler that replaced it in Linux 6.6:
+Georg Hager measured STREAM Copy bandwidth scaling on a dual-socket AMD EPYC 7451 (48 physical cores, 96 hardware threads). The results show clear regression when SMT threads are added beyond the physical core count:
 
-- **Busy balancing** (tick-based): Runs every ~4ms on busy CPUs, checks if a sibling is idle
-- **Idle balancing** (pull-based): When a CPU goes idle, it pulls work from a busy CPU
-- **Newidle balancing**: Between a task sleeping and the next tick, the CPU can steal work
+- **48 physical cores**: ~241 GB/s aggregate STREAM Copy bandwidth
+- **96 hardware threads** (all SMT siblings active): ~79 GB/s -- a **3x degradation**
 
-These balancing mechanisms are part of the kernel's scheduling domain infrastructure, shared by both CFS and EEVDF. EEVDF changes how the scheduler picks which task to run next on a given CPU (using virtual deadlines instead of virtual runtime), but the cross-CPU load balancing that decides *where* tasks run uses the same periodic rebalancing logic. The transient imbalance problem described below is identical under both schedulers.
+This is not an anomaly. On memory-bound workloads, SMT siblings compete for the same core's Line Fill Buffers, load/store queues, and TLB entries. Each sibling gets less effective bandwidth than a single thread on the same core would. The total bandwidth per core *decreases* -- the system moves less data with 96 threads than with 48.
 
-At any given moment, the scheduler might place two memtester processes on sibling SMT threads of the same physical core while leaving another core entirely idle. Idle balancing fixes this within ~1-4ms, but during that window the two co-scheduled processes share:
+The effect is architecture-dependent but consistently negative for memory-intensive workloads:
 
-- **L1/L2 cache** (contention, more evictions)
-- **Memory pipeline** (load/store buffers, fill buffers)
-- **TLB entries** (reduced effective TLB for each process)
+| Architecture | Cores | SMT threads | STREAM bandwidth regression |
+|---|---|---|---|
+| AMD EPYC 7451 (2S) | 48 | 96 | ~3x (241 → 79 GB/s) |
+| Intel Xeon (typical 2S) | varies | 2x cores | ~10-30% regression |
 
-For a memory-bound workload like memtester, co-scheduling on SMT siblings gives ~40-60% of single-thread throughput per process. Meanwhile the idle core contributes nothing.
+Reference: [Georg Hager: How STREAM bandwidth scales with core count](https://blogs.fau.de/hager/archives/8263)
 
-### Per-thread default eliminates the problem
+### Why per-core is optimal for memtester
 
-With 32 processes on 32 logical CPUs, every run queue has work. There is no idle CPU, no migration question, no transient imbalance. The scheduler places one process per logical CPU and leaves them there. Two sibling SMT threads on the same core each get ~50-60% of the core's memory bandwidth, but both are working, so the core's total memory bandwidth is fully utilised (~95-100%).
+memtester is purely memory-bound -- it writes patterns, reads them back, and compares. It has no compute bottleneck that SMT could help with. Running one instance per physical core:
 
-### Quantifying the difference
+1. **Maximises bandwidth**: Each core's full memory pipeline serves one memtester process without SMT contention
+2. **Avoids regression**: No wasted bandwidth from SMT siblings competing for the same resources
+3. **Larger allocations per process**: 16 processes × 1750 MB exercises the same total RAM as 32 × 875 MB, but with fewer process management overheads and more contiguous memory access patterns
 
-On a 16-core/32-thread system testing 28 GB (90% of 32 GB):
+### Core detection
 
-| Default | Processes | RAM/process | Scheduler issue | Effective bandwidth |
-|---------|-----------|-------------|-----------------|---------------------|
-| Per-thread (current) | 32 | 875 MB | None -- all CPUs busy | ~95-100% of peak |
-| Per-core | 16 | 1750 MB | Transient co-scheduling | ~85-95% of peak |
+pmemtester uses `lscpu -b -p=Socket,Core` to enumerate unique physical cores across all sockets. This correctly handles:
 
-The per-core approach wastes ~5-15% of memory bandwidth during transient imbalances. Over a multi-minute memtester run, these transient periods add up to a measurable slowdown.
+- **SMT deduplication**: On a 16-core/32-thread system, lscpu lists 32 lines but only 16 unique Socket,Core pairs
+- **Multi-socket systems**: Each socket's cores are counted separately (socket 0 core 0 ≠ socket 1 core 0)
+- **Online-only CPUs**: The `-b` flag filters to online CPUs only, handling hotplug correctly
 
-### Don't SMT threads share bandwidth anyway?
+If `lscpu` is unavailable (minimal containers, embedded systems), pmemtester falls back to `nproc`, which returns hardware threads. This is a conservative fallback -- more processes than needed, but functional.
 
-Two threads on the same core get ~1.0-1.15x the bandwidth of one thread, not 2x. But the advantage of per-thread is not extra bandwidth per core -- it is:
+### When per-thread would be better
 
-1. **Guaranteed scheduling fairness**: No core sits idle while a sibling is double-loaded
-2. **Memory controller interleaving**: 32 smaller allocations (875 MB each) exercise more diverse physical address ranges than 16 larger ones (1750 MB each), potentially hitting more memory controller channels
-3. **Simplicity**: `nproc` matches the kernel's view of schedulable entities -- no SMT detection logic needed
-
-### When per-core would be better
-
-Per-core only wins if you pin each process to a specific core with `taskset` (eliminating scheduler indeterminism), the system has no SMT (where `nproc` already gives per-core), or you are testing with extremely small RAM per thread where process overhead dominates.
-
-For explicit control, the planned `--threads N` option (see [TODO.md](TODO.md#cores-vs-threads)) will allow users to override the default.
+Per-thread (the old default) only wins if the workload has significant compute phases that benefit from SMT (memtester does not), or if you want to guarantee every logical CPU has work to prevent scheduler migration entirely. For explicit control, use the planned `--threads N` option (see [TODO.md](TODO.md#cores-vs-threads)).
 
 ## Which Linux distros support EDAC?
 
