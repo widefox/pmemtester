@@ -310,6 +310,48 @@ EDAC is available on most Linux-supported architectures, though driver coverage 
 
 The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with UEFI firmware support, providing a uniform EDAC sysfs interface regardless of the specific memory controller.
 
+## How do standalone boot tools (MemTest86, Memtest86+) detect ECC errors?
+
+Standalone boot tools run at the highest CPU privilege level (Ring 0 on x86, EL1/EL2 on ARM64, PLV0 on LoongArch) and poll hardware registers directly — no OS or EDAC driver is involved.
+
+### MemTest86 (PassMark)
+
+MemTest86 uses four different register access mechanisms depending on the chipset:
+
+1. **MCA (Machine Check Architecture) MSRs** — reads MCi_STATUS, MCi_ADDR, and MCi_MISC registers via `rdmsr`. Bit 61 (UC) of MCi_STATUS distinguishes correctable from uncorrectable errors.
+2. **IMC PCI registers** — chipset-specific Integrated Memory Controller registers that record DRAM address details (rank, bank, row, column).
+3. **Sideband registers** — used on Intel Atom SoCs via an internal bus.
+4. **AMD SMN (System Management Network)** — used on AMD Ryzen/EPYC to access Unified Memory Controller ECC registers.
+
+Each chipset family requires specific polling code. PassMark has added support incrementally across dozens of Intel and AMD chipsets (Sandy Bridge through Arrow Lake/Lunar Lake; AMD FX through Zen 5). **ARM64 has no ECC support** — PassMark stated they have not seen ARM platforms with ECC RAM for testing.
+
+**Free vs Pro edition:**
+
+| Feature | Free | Pro |
+|---------|------|-----|
+| ECC mode/capability detection | Yes | Yes |
+| ECC error polling (CE + UE counts) | Yes | Yes |
+| Faulty DIMM identification (per-DIMM address decoding) | No | Yes |
+| ECC error injection | No | Yes |
+
+Per-DIMM identification requires reversing the memory controller's address interleaving configuration to map a physical address to a specific channel, slot, rank, bank, row, and column. On AMD this is documented in the Processor Programming Reference; on Intel the address decoding scheme is often proprietary.
+
+### Memtest86+
+
+Memtest86+ polls AMD UMC (Unified Memory Controller) MCA MSR banks and AMD SMN registers. The implementation is in `system/imc/x86/amd_zen.c` in the source tree. It reads UMC MCA Status MSRs to detect errors, distinguishes CE from UE via dedicated status bits, reads the error address from UMC MCA Address MSRs, and reads error counts from SMN registers.
+
+**Current limitations:**
+
+- **AMD Ryzen only.** Supported families: Zen (Family 17h), Zen 3 Vermeer, Zen 3+ Rembrandt, Zen 4 Raphael, Zen 5 Granite Ridge. There is zero Intel ECC polling code in the codebase — the Intel IMC files handle memory timings only.
+- **Disabled by default.** `enable_ecc_polling` is `false` in `app/config.c` and there is no command-line flag to enable it — you must edit the source and recompile. [PR #566](https://github.com/memtest86plus/memtest86plus/pull/566) (open, not yet merged) would add a runtime toggle.
+- **No LoongArch or other architecture ECC support.**
+
+### How hardware distinguishes CE from UE
+
+The memory controller's SECDED (Single Error Correct, Double Error Detect) logic generates a syndrome when reading ECC-protected data. A non-zero syndrome that maps to a single correctable bit triggers a CE flag; a syndrome indicating an error beyond correction capability triggers a UE flag. The standalone tools simply read these hardware-populated status bits — they do not implement ECC decoding themselves.
+
+References: [MemTest86 ECC technical details](https://www.memtest86.com/ecc.htm), [MemTest86 edition comparison](https://www.memtest86.com/compare.html), [Memtest86+ GitHub: ECC discussion #92](https://github.com/memtest86plus/memtest86plus/discussions/92), [Memtest86+ GitHub: enabling ECC in v7 discussion #436](https://github.com/memtest86plus/memtest86plus/discussions/436), [Memtest86+ GitHub: ECC polling option PR #566](https://github.com/memtest86plus/memtest86plus/pull/566).
+
 ## How do I evacuate a socket for dedicated memory testing?
 
 On a multi-socket server you may want to test one socket's RAM while keeping the other socket running production workloads. This requires moving both process execution and memory pages off the target socket before running pmemtester on it.

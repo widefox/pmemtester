@@ -13,6 +13,7 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/), and
 - RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
 - Linux EDAC hardware error detection (before/after comparison)
+- Optionally allow correctable EDAC errors (`--allow-ce`); only fail on uncorrectable (UE)
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester results and EDAC checks
 
@@ -51,6 +52,14 @@ Options:
 ```
 
 The `--memtester-dir` default may differ on distro-packaged installations (see [Installation](#installation)).
+
+## Why EDAC Matters
+
+ECC hardware silently corrects single-bit errors before userspace reads the data. No userspace memory stress test — memtester, stressapptest, stress-ng, or any other — can detect a correctable ECC error on its own. A DIMM can be accumulating correctable errors (possibly an indicator of failure; see [FAQ](FAQ.md#do-correctable-errors-predict-future-uncorrectable-errors)) while every test tool reports PASS.
+
+pmemtester is the first Linux memory stress tester to integrate [EDAC](https://docs.kernel.org/driver-api/edac.html) monitoring. It snapshots hardware error counters before and after the test and fails if any new errors appeared during the run. The `--allow-ce` flag lets you distinguish between correctable errors (log and monitor) and uncorrectable errors (fail immediately), matching modern vendor guidance that treats CEs as a monitoring signal rather than an automatic replacement trigger (see [FAQ](FAQ.md#how-many-correctable-errors-before-replacing-a-dimm)).
+
+Without EDAC integration, the only alternative is to run a stress tool in one terminal and rasdaemon or manual `edac-util` checks in another — and hope you remember to compare before and after.
 
 ## Why Parallel?
 
@@ -345,8 +354,8 @@ See [TODO.md](TODO.md) for planned improvements including EDAC region correlatio
 
 | Tool | Environment | Parallel | ECC CE Detection | Active | License |
 |------|-------------|----------|-----------------|--------|---------|
-| MemTest86 (PassMark) | Standalone boot | Yes | **Yes** (direct HW polling, per-DIMM) | Yes (v11.6, 2026) | Proprietary freeware |
-| Memtest86+ | Standalone boot | Yes | **Partial** (AMD Ryzen only, manual recompile) | Yes (v8.0, 2025) | GPL-2.0 |
+| MemTest86 (PassMark) | Standalone boot | Yes | **Yes** (direct HW polling; per-DIMM in Pro edition) | Yes (v11.6, 2026) | Proprietary freeware |
+| Memtest86+ | Standalone boot | Yes | **Partial** (AMD Ryzen only, manual recompile) | Yes (v8.0, 2024) | GPL-2.0 |
 
 Both tools boot without an OS and run all memory tests at the highest available privilege level. Real mode is only used transiently during legacy BIOS boot (a few instructions before switching modes) and during per-core SMP wakeup; no testing occurs in real mode.
 
