@@ -97,3 +97,7 @@ Default settings must never crash the host:
 - Linux kernel with EDAC support (optional — gracefully skipped if absent)
 - Standard Linux utilities: `lscpu`, `nproc` (fallback), `dmesg`, `awk`, `find`, `diff`
 - Test tools: `bats` (1.13.0+), `kcov` (38+), `shellcheck` (0.10.0+)
+
+### Source Quality Policy
+
+References in documentation (FAQ.md, README.md, etc.) must be either **primary sources** (original data, vendor documentation, source code, academic papers) or **quality secondary sources** (peer-reviewed publications, established research blogs like Georg Hager's, official vendor knowledge bases). Avoid forum posts, personal blogs without original data, and other low-reliability sources.

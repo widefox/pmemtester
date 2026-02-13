@@ -10,7 +10,7 @@ pmemtester parallelises memtester across all physical CPU cores, reducing wall-c
 | pmemtester | 16 instances, 4 GB each | ~20 minutes (1 loop) |
 | stressapptest | Default (auto-threads) | User-specified duration (typically 60s-2hrs) |
 
-References: [memtester 64 GB timing estimate (GitHub issue #2)](https://github.com/jnavila/memtester/issues/2), [stressapptest x86 benchmark output (benjr.tw)](https://benjr.tw/96776), [Tom's Hardware: multi-thread memory bandwidth scaling](https://forums.tomshardware.com/threads/whats-the-point-of-running-memtest86-with-multiple-cpu-cores.2774165/).
+References: [memtester 64 GB timing estimate (GitHub issue #2)](https://github.com/jnavila/memtester/issues/2).
 
 ## What does pmemtester test that stressapptest doesn't (and vice versa)?
 
