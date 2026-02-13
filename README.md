@@ -333,15 +333,30 @@ See [TODO.md](TODO.md) for planned improvements including EDAC region correlatio
 |------|-------------|----------|-----------------|--------|---------|
 | **pmemtester** | Userspace (Bash) | Yes | **Yes** (EDAC before/after) | Yes (v0.2, 2026) | GPL-2.0 |
 | memtester | Userspace | No | No | Yes (v4.7.1, 2024) | GPL-2.0 |
-| MemTest86 (PassMark) | Standalone boot | Yes | **Yes** (direct HW polling, per-DIMM) | Yes (v11.6, 2026) | Proprietary freeware |
-| Memtest86+ | Standalone boot | Yes | **Partial** (AMD Ryzen only, manual recompile) | Yes (v8.0, 2025) | GPL-2.0 |
 | stressapptest | Userspace | Yes | No | Low (v1.0.11, 2023) | Apache-2.0 |
 | stress-ng | Userspace | Yes | No | Yes (monthly releases) | GPL-2.0 |
 | DimmReaper | Userspace | Yes | No | Low (2024) | GPL-2.0 |
 | ocp-diag-memtester | Userspace (Python) | No | No | Low (2023) | Apache-2.0 |
-| mprime/Prime95 | Userspace | Yes | No | Yes | Freeware |
 | rasdaemon | Userspace daemon | N/A (monitor) | **Yes** (EDAC tracing) | Yes (v0.8.4, 2025) | GPL-2.0 |
 | edac-utils | Userspace | N/A (reporting) | **Yes** (EDAC sysfs) | No (dormant since 2008) | GPL-2.0 |
+| mprime/Prime95 | Userspace | Yes | No | Yes | Freeware |
+
+### Standalone Boot Tools
+
+| Tool | Environment | Parallel | ECC CE Detection | Active | License |
+|------|-------------|----------|-----------------|--------|---------|
+| MemTest86 (PassMark) | Standalone boot | Yes | **Yes** (direct HW polling, per-DIMM) | Yes (v11.6, 2026) | Proprietary freeware |
+| Memtest86+ | Standalone boot | Yes | **Partial** (AMD Ryzen only, manual recompile) | Yes (v8.0, 2025) | GPL-2.0 |
+
+Both tools boot without an OS and run all memory tests at the highest available privilege level. Real mode is only used transiently during legacy BIOS boot (a few instructions before switching modes) and during per-core SMP wakeup; no testing occurs in real mode.
+
+| Tool | Architecture | Testing CPU Mode | Privilege Level |
+|------|-------------|-----------------|-----------------|
+| MemTest86 (PassMark) | x86-64 | 64-bit long mode | Ring 0 |
+| MemTest86 (PassMark) | ARM64 | AArch64 | EL1 or EL2 (firmware-dependent) |
+| Memtest86+ | x86-64 (UEFI) | 64-bit long mode | Ring 0 |
+| Memtest86+ | x86-64 (legacy BIOS) | Long mode (or 32-bit protected + PAE on 32-bit CPUs) | Ring 0 |
+| Memtest86+ | LoongArch64 | 64-bit paging mode | PLV0 |
 
 No userspace memory stress test tool detects ECC correctable errors on its own -- ECC hardware silently corrects single-bit errors before userspace reads the data. pmemtester is the first tool that combines pattern-based stress testing with EDAC error detection. The alternative is to run a stress tool while rasdaemon monitors EDAC counters separately.
 

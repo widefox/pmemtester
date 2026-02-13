@@ -108,10 +108,57 @@ Considerations:
 - Cross-platform portability: memtester supports non-Linux systems; pmemtester is Linux-only (EDAC dependency)
 - Build system: autotools or meson, with the test suite ported from bats to a C test framework or kept as integration tests
 
-## 10. FAQ
+## 10. Optional stressapptest Second Pass
 
-Add more items to [FAQ.md](FAQ.md). Candidate topics:
+Run stressapptest automatically after the memtester pass to combine deterministic pattern testing with randomised bus-contention stress testing in a single invocation.
 
-- NUMA effects on test results
-- Interpreting memtester test names (which pattern tests what)
-- When to use pmemtester vs MemTest86+ (userspace vs standalone boot)
+Rationale:
+- memtester finds stuck bits and coupling faults via deterministic patterns but generates little electrical noise
+- stressapptest finds timing margin failures and bus contention errors via randomised multi-threaded traffic (see README "Testing philosophy" section)
+- Running both back-to-back covers complementary failure modes without requiring the user to invoke two separate tools
+- EDAC monitoring spans both passes, catching hardware errors triggered by either workload
+
+Behaviour:
+- On by default: runs automatically if `stressapptest` is found in `/usr/local/bin` (or the directory specified by a future `--stressapptest-dir` flag)
+- Disabled explicitly with `--no-stressapptest`
+- Forced on with `--stressapptest` (fails with an error if the binary is not found, rather than silently skipping)
+- Explicit duration with `--stressapptest=SECONDS`; default duration is the wall-clock time the memtester pass took (timed internally)
+- stressapptest uses the same RAM amount and core count as the memtester pass
+- EDAC before/after comparison spans both passes (single before snapshot, single after snapshot)
+- stressapptest exit code is incorporated into the final PASS/FAIL verdict
+- Per-pass results are reported separately in the master log (memtester result, stressapptest result, EDAC result)
+
+Considerations:
+- stressapptest must be installed separately (not bundled); silently skipped if not found in the default case, but errors out if `--stressapptest` was explicitly requested
+- stressapptest allocates its own memory independently -- the total memory pressure is sequential, not additive, since memtester finishes first
+- stressapptest's `--mem_threads` and `-M` (memory size in MB) flags map naturally to pmemtester's core count and per-core RAM allocation
+- The `--seconds` flag controls stressapptest duration directly
+- Log stressapptest stdout/stderr to a dedicated log file in the log directory (e.g., `stressapptest.log`)
+
+## 11. Stop on First Error
+
+Add a `--stop-on-error` flag that terminates the run immediately when any error is detected, rather than waiting for all memtester instances to complete.
+
+Rationale:
+- On large multi-socket systems a full run can take hours; if the first core reports a failure after 10 minutes there is no point waiting for the remaining cores
+- EDAC uncorrectable errors (UE) indicate serious hardware faults -- continuing to stress faulty memory risks data corruption or kernel panic
+- Useful in automated pipelines (CI, burn-in scripts) where a fast fail verdict is more valuable than a complete report
+
+Behaviour:
+- Off by default (current behaviour: wait for all threads, then report)
+- When enabled, monitor two error sources during the run:
+  1. **memtester exit**: any memtester process exits non-zero → kill remaining memtester processes and proceed to verdict
+  2. **EDAC polling**: periodically poll EDAC counters (e.g., every 5-10 seconds) during the run; if any counter increases → kill all memtester processes and proceed to verdict
+- Take a final EDAC snapshot after killing processes so the before/after diff is accurate
+- Report which error source triggered the early stop in the master log
+- If the stressapptest second pass is enabled, skip it on early stop (memory is already known bad)
+
+Considerations:
+- EDAC polling interval is a tradeoff: too frequent adds overhead, too infrequent delays detection. A reasonable default is every 10 seconds, potentially configurable with `--edac-poll-interval`
+- memtester processes are independent background jobs; killing them requires sending SIGTERM to each tracked PID and waiting for cleanup
+- Correctable errors (CE) with `--allow-ce` should not trigger early stop -- only UE or memtester failure should
+- The polling loop must not interfere with memtester performance; a simple shell `sleep`/`diff` loop on EDAC sysfs counters should have negligible overhead
+
+## 12. FAQ: Interpreting memtester test names
+
+Add an [FAQ.md](FAQ.md) entry explaining which pattern tests what (stuck address, walking ones/zeros, checkerboard, etc.) and what class of fault each one detects.
