@@ -314,6 +314,86 @@ EDAC is available on most Linux-supported architectures, though driver coverage 
 
 The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with UEFI firmware support, providing a uniform EDAC sysfs interface regardless of the specific memory controller.
 
+## How do I evacuate a socket for dedicated memory testing?
+
+On a multi-socket server you may want to test one socket's RAM while keeping the other socket running production workloads. This requires moving both process execution and memory pages off the target socket before running pmemtester on it.
+
+### 1. Identify your topology
+
+```bash
+# Show socket/core/NUMA layout
+lscpu | grep -e "Socket(s)" -e "Core(s) per socket" -e "NUMA node"
+
+# Show per-node memory and CPU assignments
+numactl --hardware
+```
+
+This tells you which logical cores and memory belong to each NUMA node (typically node 0 = socket 0, node 1 = socket 1).
+
+### 2. Move processes off the target socket
+
+Use `taskset` to change CPU affinity for running user processes. Moving kernel threads is restricted and generally unnecessary — focus on user-space processes.
+
+```bash
+# Move all user processes from socket 0 (cores 0-15) to socket 1 (cores 16-31)
+# Adjust core ranges to match your topology from step 1
+for pid in $(ps -e -o pid=); do
+    taskset -pc 16-31 "$pid" 2>/dev/null
+done
+```
+
+For services managed by systemd, set `CPUAffinity=` in the unit file or use `systemctl set-property`:
+
+```bash
+systemctl set-property myservice.service CPUAffinity=16-31
+```
+
+### 3. Migrate memory pages
+
+Moving process execution is only half the job. If a process runs on socket 1 but its pages remain in socket 0's RAM, those pages occupy the memory you want to test and incur a cross-socket NUMA penalty.
+
+```bash
+# Migrate all pages of PID 1234 from node 0 to node 1
+migratepages 1234 0 1
+```
+
+Not all pages can be migrated (kernel pages, huge pages in use, mlocked pages). Check `/proc/<pid>/numa_maps` to verify migration.
+
+### 4. Run pmemtester on the evacuated socket
+
+```bash
+# Test socket 0's RAM using socket 0's cores
+sudo numactl --cpunodebind=0 --membind=0 pmemtester --percent 90
+```
+
+The `--percent 90` applies to available memory on that NUMA node, not the whole system. Because you evacuated most processes, more of the node's RAM will be available for testing.
+
+### 5. Persistent isolation with cgroups
+
+For repeated testing or to prevent processes from migrating back, use cpuset cgroups to fence off an entire socket:
+
+```bash
+# cgroups v2 (modern distros)
+mkdir /sys/fs/cgroup/socket0_test
+echo "+cpuset" > /sys/fs/cgroup/socket0_test/cgroup.subtree_control
+echo "0-15" > /sys/fs/cgroup/socket0_test/cpuset.cpus
+echo "0" > /sys/fs/cgroup/socket0_test/cpuset.mems
+
+# Move pmemtester into the cgroup
+echo $$ > /sys/fs/cgroup/socket0_test/cgroup.procs
+sudo numactl --membind=0 pmemtester --percent 90
+```
+
+On older systems using cgroups v1, the path is `/sys/fs/cgroup/cpuset/` and processes are assigned via the `tasks` file.
+
+### Limitations
+
+- **Kernel memory cannot be evacuated.** Kernel slab caches, page tables, and DMA buffers on the target node remain untestable from userspace. This is a fundamental limitation of all userspace memory testing (see [userspace vs bare-metal](#userspace-vs-bare-metal-testing) in the README).
+- **`migratepages` is best-effort.** Pages that are mlocked, in active I/O, or backed by huge pages may not migrate. Verify with `numastat -p <pid>`.
+- **EDAC counters are system-wide.** Even with socket isolation, pmemtester's EDAC check sees errors from both sockets. An EDAC error on the non-tested socket during the run will cause a false FAIL.
+
+References: [numactl(8)](https://linux.die.net/man/8/numactl), [migratepages(8)](https://linux.die.net/man/8/migratepages), [cgroups v2 cpuset (kernel.org)](https://docs.kernel.org/admin-guide/cgroup-v2.html#cpuset-interface-files), [taskset(1)](https://linux.die.net/man/1/taskset).
+
 ## Why not drop caches before running?
 
 `MemAvailable` in `/proc/meminfo` already accounts for reclaimable page cache and reclaimable slab (dentries/inodes) -- the kernel will evict these as needed when memtester allocates memory. Dropping caches (`echo 3 > /proc/sys/vm/drop_caches`) before running is unnecessary because the kernel reclaims clean cache pages on demand under allocation pressure. `MemAvailable` is deliberately conservative (it subtracts low watermarks and counts only half of reclaimable slab to account for fragmentation), so the actual reclaimable memory is slightly higher than the estimate -- but this works in pmemtester's favour, not against it. The practical outcome is the same whether you drop caches or not. Note that `drop_caches` only releases *clean* pages -- dirty pages (modified but not yet written to disk) are kept. If you did want to maximise free memory manually, you would need to run `sync` first to flush dirty pages to disk, converting them to clean pages that `drop_caches` can then release. But again, the kernel handles all of this automatically under allocation pressure, so neither `sync` nor `drop_caches` is needed before running pmemtester.
