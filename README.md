@@ -45,9 +45,13 @@ Options:
   --memtester-dir DIR Directory containing memtester binary (default: /usr/local/bin)
   --log-dir DIR       Directory for log files (default: /tmp/pmemtester.PID)
   --iterations N      Number of memtester iterations (default: 1)
+  --allow-ce          Allow correctable EDAC errors (CE); only fail on uncorrectable (UE)
+  --color MODE        Coloured output: auto (default), on, off
   --version           Show version
   --help              Show this help message
 ```
+
+The `--memtester-dir` default may differ on distro-packaged installations (see [Installation](#installation)).
 
 ## Why Parallel?
 
@@ -121,7 +125,8 @@ test/
 │   ├── parallel.bats
 │   └── logging.bats
 ├── integration/
-│   └── full_run.bats           # End-to-end tests with mocked commands
+│   ├── full_run.bats           # End-to-end tests with mocked commands
+│   └── install.bats            # Install target tests (MEMTESTER_DIR patching)
 ├── fixtures/                   # Synthetic /proc/meminfo, EDAC sysfs trees
 │   ├── proc_meminfo_normal
 │   ├── proc_meminfo_low
@@ -259,7 +264,7 @@ parse_args --> validate_args --> find_memtester --> calculate_test_ram_kb
 
 ## Testing
 
-131 tests, 100% code coverage (242/242 lines).
+189 tests (164 unit + 25 integration).
 
 ```bash
 make test              # Run all tests (unit + integration)
@@ -269,7 +274,7 @@ make coverage          # Generate kcov coverage report
 make lint              # Run shellcheck
 ```
 
-Test infrastructure: [bats-core](https://github.com/bats-core/bats-core) 1.13.0 with bats-support/bats-assert. Coverage via [kcov](https://simonkagstrom.github.io/kcov/).
+Test infrastructure: [bats-core](https://github.com/bats-core/bats-core) 1.13.0 with bats-support/bats-assert. Coverage via [kcov](https://simonkagstrom.github.io/kcov/) v38+ (older versions cannot instrument bash `source`d files inside bats subshells; if your distro ships an older version such as Fedora's v35, build from [source](https://github.com/SimonKagstrom/kcov)).
 
 ## Installation
 
@@ -280,13 +285,32 @@ make uninstall         # Remove installed files
 make dist              # Create .tgz distribution archive
 ```
 
+### Distro packaging
+
+On distributions that package memtester to `/usr/bin`, pass `MEMTESTER_DIR` at install time to change the default:
+
+```bash
+make install MEMTESTER_DIR=/usr/bin
+```
+
+This patches the default so `pmemtester --help` shows `(default: /usr/bin)` and memtester is found without needing `--memtester-dir`. The `--memtester-dir` flag still overrides at runtime.
+
+Distributions that package memtester (all install to `/usr/bin/memtester`):
+
+- Fedora
+- Debian / Ubuntu
+- Arch Linux
+- openSUSE
+- Gentoo
+- Alpine Linux
+
 ## Requirements
 
 - **memtester** binary (not bundled) -- [pyropus.ca](https://pyropus.ca./software/memtester/)
 - Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
 - `nproc` (from coreutils)
 - EDAC support (optional -- gracefully skipped if absent)
-- For testing: bats 1.13.0+, kcov 35+, shellcheck 0.10.0+
+- For testing: bats 1.13.0+, kcov 38+ (v35 cannot trace `source`d files in bats; build from [source](https://github.com/SimonKagstrom/kcov) if needed), shellcheck 0.10.0+
 
 ## EDAC Compatibility
 

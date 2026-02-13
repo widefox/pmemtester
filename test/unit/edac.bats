@@ -76,21 +76,147 @@ teardown() {
     assert_failure
 }
 
-@test "compare_edac_counters unchanged" {
+@test "classify_edac_counters unchanged returns none" {
     local f="${TEST_DIR}/counters.txt"
     echo "mc0/csrow0/ce_count:0" > "$f"
     echo "mc0/csrow0/ue_count:0" >> "$f"
-    run compare_edac_counters "$f" "$f"
+    run classify_edac_counters "$f" "$f"
     assert_success
+    assert_output "none"
 }
 
-@test "compare_edac_counters increased" {
+@test "classify_edac_counters increased returns ce_only" {
     local before="${TEST_DIR}/before.txt"
     local after="${TEST_DIR}/after.txt"
     echo "mc0/csrow0/ce_count:0" > "$before"
     echo "mc0/csrow0/ue_count:0" >> "$before"
     echo "mc0/csrow0/ce_count:3" > "$after"
     echo "mc0/csrow0/ue_count:0" >> "$after"
-    run compare_edac_counters "$before" "$after"
+    run classify_edac_counters "$before" "$after"
     assert_failure
+    assert_line "ce_only"
+}
+
+# classify_edac_counters tests
+
+@test "classify_edac_counters no change" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    echo "mc0/csrow0/ce_count:0" > "$before"
+    echo "mc0/csrow0/ue_count:0" >> "$before"
+    cp "$before" "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_success
+    assert_output "none"
+}
+
+@test "classify_edac_counters ce only" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    echo "mc0/csrow0/ce_count:0" > "$before"
+    echo "mc0/csrow0/ue_count:0" >> "$before"
+    echo "mc0/csrow0/ce_count:3" > "$after"
+    echo "mc0/csrow0/ue_count:0" >> "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_failure
+    assert_line "ce_only"
+}
+
+@test "classify_edac_counters ue only" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    echo "mc0/csrow0/ce_count:0" > "$before"
+    echo "mc0/csrow0/ue_count:0" >> "$before"
+    echo "mc0/csrow0/ce_count:0" > "$after"
+    echo "mc0/csrow0/ue_count:2" >> "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_failure
+    assert_line "ue_only"
+}
+
+@test "classify_edac_counters ce and ue" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    echo "mc0/csrow0/ce_count:0" > "$before"
+    echo "mc0/csrow0/ue_count:0" >> "$before"
+    echo "mc0/csrow0/ce_count:5" > "$after"
+    echo "mc0/csrow0/ue_count:1" >> "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_failure
+    assert_line "ce_and_ue"
+}
+
+@test "classify_edac_counters multi-MC ce only" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    printf "mc0/csrow0/ce_count:0\nmc0/csrow0/ue_count:0\nmc1/csrow0/ce_count:0\nmc1/csrow0/ue_count:0\n" > "$before"
+    printf "mc0/csrow0/ce_count:2\nmc0/csrow0/ue_count:0\nmc1/csrow0/ce_count:1\nmc1/csrow0/ue_count:0\n" > "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_failure
+    assert_line "ce_only"
+}
+
+@test "classify_edac_counters multi-MC mixed" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    printf "mc0/csrow0/ce_count:0\nmc0/csrow0/ue_count:0\nmc1/csrow0/ce_count:0\nmc1/csrow0/ue_count:0\n" > "$before"
+    printf "mc0/csrow0/ce_count:3\nmc0/csrow0/ue_count:0\nmc1/csrow0/ce_count:0\nmc1/csrow0/ue_count:1\n" > "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_failure
+    assert_line "ce_and_ue"
+}
+
+@test "classify_edac_counters new counter in after file" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    echo "mc0/csrow0/ce_count:0" > "$before"
+    printf "mc0/csrow0/ce_count:0\nmc0/csrow0/ue_count:2\n" > "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_failure
+    assert_line "ue_only"
+}
+
+@test "classify_edac_counters ignores non-ce/ue counters" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    printf "mc0/csrow0/ce_count:0\nmc0/csrow0/ue_count:0\nmc0/csrow0/other_count:0\n" > "$before"
+    printf "mc0/csrow0/ce_count:0\nmc0/csrow0/ue_count:0\nmc0/csrow0/other_count:5\n" > "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_success
+    assert_output "none"
+}
+
+@test "classify_edac_counters ignores counter decrease" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    echo "mc0/csrow0/ce_count:5" > "$before"
+    echo "mc0/csrow0/ue_count:0" >> "$before"
+    echo "mc0/csrow0/ce_count:3" > "$after"
+    echo "mc0/csrow0/ue_count:0" >> "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_success
+    assert_output "none"
+}
+
+@test "classify_edac_counters empty files" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    : > "$before"
+    : > "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_success
+    assert_output "none"
+}
+
+@test "classify_edac_counters reports changed counters on stderr" {
+    local before="${TEST_DIR}/before.txt"
+    local after="${TEST_DIR}/after.txt"
+    echo "mc0/csrow0/ce_count:0" > "$before"
+    echo "mc0/csrow0/ue_count:0" >> "$before"
+    echo "mc0/csrow0/ce_count:3" > "$after"
+    echo "mc0/csrow0/ue_count:0" >> "$after"
+    run classify_edac_counters "$before" "$after"
+    assert_output --partial "ce_only"
+    # stderr is merged into output by bats 'run'
+    assert_output --partial "mc0/csrow0/ce_count"
 }

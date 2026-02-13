@@ -72,7 +72,7 @@ lib/
 - **Framework**: bats-core 1.13.0 with bats-support and bats-assert (git submodules)
 - **Mocking**: PATH-prepend mock scripts for external commands (`memtester`, `nproc`, `dmesg`); environment variable overrides for files (`PROC_MEMINFO`, `EDAC_BASE`, `MOCK_ULIMIT_L`); function overrides for builtins (`_read_ulimit_l`)
 - **Fixtures**: `test/fixtures/` contains synthetic `/proc/meminfo` files and EDAC sysfs directory trees
-- **Coverage**: kcov 35 with `--include-path=./lib,./pmemtester`
+- **Coverage**: kcov 38+ with `--include-path=./lib,./pmemtester` (v35 cannot instrument bash `source`d files inside bats subshells; build from [source](https://github.com/SimonKagstrom/kcov) if distro version is too old)
 
 ### Bash Integer Arithmetic
 
@@ -96,4 +96,4 @@ Default settings must never crash the host:
 - `memtester` binary (not bundled)
 - Linux kernel with EDAC support (optional — gracefully skipped if absent)
 - Standard Linux utilities: `nproc`, `dmesg`, `awk`, `find`, `diff`
-- Test tools: `bats` (1.13.0+), `kcov` (35+), `shellcheck` (0.10.0+)
+- Test tools: `bats` (1.13.0+), `kcov` (38+), `shellcheck` (0.10.0+)

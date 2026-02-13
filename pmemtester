@@ -19,6 +19,7 @@ done
 main() {
     parse_args "$@"
     validate_args
+    color_init
 
     local memtester_path
     memtester_path="$(find_memtester "$MEMTESTER_DIR")"
@@ -54,26 +55,57 @@ main() {
     wait_and_collect "$log_dir" || memtester_result=1
 
     # EDAC after
-    local edac_result=0
+    local edac_msg_result=0
+    local edac_class="none"
     if [[ "$edac_supported" -eq 1 ]]; then
         capture_edac_messages > "${log_dir}/edac_messages_after.txt"
         capture_edac_counters > "${log_dir}/edac_counters_after.txt"
-        compare_edac_messages "${log_dir}/edac_messages_before.txt" "${log_dir}/edac_messages_after.txt" || edac_result=1
-        compare_edac_counters "${log_dir}/edac_counters_before.txt" "${log_dir}/edac_counters_after.txt" || edac_result=1
+        compare_edac_messages "${log_dir}/edac_messages_before.txt" "${log_dir}/edac_messages_after.txt" || edac_msg_result=1
+        edac_class="$(classify_edac_counters "${log_dir}/edac_counters_before.txt" "${log_dir}/edac_counters_after.txt" 2>"${log_dir}/edac_detail.txt")" || true
+        if [[ "$edac_class" != "none" ]]; then
+            log_master "EDAC counter classification: ${edac_class}" "$log_dir"
+            cat "${log_dir}/edac_detail.txt" >> "${log_dir}/master.log"
+        fi
     fi
 
     aggregate_logs "$log_dir" "$thread_count"
 
     # Final verdict
-    if [[ "$memtester_result" -eq 0 ]] && [[ "$edac_result" -eq 0 ]]; then
-        log_master "PASS: All memtesters passed, no EDAC errors" "$log_dir"
-        echo "PASS"
-        return 0
-    else
-        log_master "FAIL: memtester_result=${memtester_result} edac_result=${edac_result}" "$log_dir"
-        echo "FAIL"
+    # Build failure source for diagnostic output
+    local fail_sources=""
+    if [[ "$memtester_result" -ne 0 ]]; then
+        fail_sources="memtester"
+    fi
+    if [[ "$edac_class" == "ue_only" ]] || [[ "$edac_class" == "ce_and_ue" ]]; then
+        fail_sources="${fail_sources:+${fail_sources}, }EDAC: ${edac_class}"
+    fi
+    if [[ "$edac_msg_result" -ne 0 ]]; then
+        fail_sources="${fail_sources:+${fail_sources}, }EDAC: new messages"
+    fi
+
+    # Priority 1: memtester failure, UE, or new dmesg messages → FAIL
+    if [[ -n "$fail_sources" ]]; then
+        log_master "FAIL: memtester_result=${memtester_result} edac_class=${edac_class} edac_msg_result=${edac_msg_result}" "$log_dir"
+        color_fail "$fail_sources"
         return 1
     fi
+    # Priority 2: CE only + --allow-ce → PASS with WARNING
+    if [[ "$edac_class" == "ce_only" ]] && [[ "$ALLOW_CE" -eq 1 ]]; then
+        log_master "PASS (WARNING: correctable EDAC errors detected)" "$log_dir"
+        color_pass
+        color_warn "correctable EDAC errors detected (ce_only)"
+        return 0
+    fi
+    # Priority 3: CE only without --allow-ce → FAIL
+    if [[ "$edac_class" == "ce_only" ]]; then
+        log_master "FAIL: memtester_result=${memtester_result} edac_class=${edac_class}" "$log_dir"
+        color_fail "EDAC: ce_only"
+        return 1
+    fi
+    # Priority 4: clean → PASS
+    log_master "PASS: All memtesters passed, no EDAC errors" "$log_dir"
+    color_pass
+    return 0
 }
 
 main "$@"

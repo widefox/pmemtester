@@ -1,19 +1,6 @@
 # TODO
 
-## EDAC Error Classification
-
-Distinguish between EDAC error types in the pass/fail verdict:
-
-- **CE (Correctable Errors)**: Single-bit ECC errors (ce_count) -- hardware corrected, data intact, but indicates degrading DIMM
-- **UE (Uncorrectable Errors)**: Multi-bit errors (ue_count) -- data corruption, critical failure
-- **Other errors**: PCI parity errors, cache errors, thermal events
-
-Currently pmemtester treats any EDAC counter change as a failure. A more nuanced approach would:
-- Report CE vs UE separately in the log
-- Optionally allow CE-only runs to pass with a warning (--allow-ce flag)
-- Always fail on UE (uncorrectable = data corruption)
-
-## EDAC Region Correlation
+## 1. EDAC Region Correlation
 
 EDAC counters are system-wide -- pmemtester compares counters across all memory controllers before and after the test, with no correlation to the specific memory regions being tested. This means:
 
@@ -27,7 +14,7 @@ Potential improvements:
 - Add `--edac-mc N` flag to restrict EDAC checking to a specific memory controller
 - Log which MC/csrow/channel reported the error change for easier diagnosis
 
-## Architecture Support
+## 2. Architecture Support
 
 pmemtester currently assumes x86 Linux. Validate and test on:
 
@@ -43,7 +30,7 @@ Considerations:
 - `ulimit -l` memory locking behavior may differ across platforms
 - EDAC_GHES (firmware-first) may be the only EDAC path on some ARM64 servers
 
-## NUMA Locality
+## 3. NUMA Locality
 
 Document and potentially improve NUMA behaviour:
 
@@ -53,7 +40,7 @@ Document and potentially improve NUMA behaviour:
 - Consider adding a `--numa-node N` flag to constrain testing to a specific NUMA node natively
 - Consider adding a `--per-node` mode that tests each NUMA node sequentially and reports per-node results
 
-## Heterogeneous Cores
+## 4. Heterogeneous Cores
 
 pmemtester currently treats all CPU threads homogeneously:
 
@@ -62,7 +49,7 @@ pmemtester currently treats all CPU threads homogeneously:
 - Document this assumption and any edge cases (e.g., E-cores with smaller cache may exhibit different memory access patterns)
 - Consider whether thread pinning (`taskset`) to specific core types would improve test coverage or reproducibility
 
-## Cores vs Threads
+## 5. Cores vs Threads
 
 pmemtester uses `nproc` which returns the number of hardware threads (including SMT/HyperThreading), not physical cores:
 
@@ -71,7 +58,7 @@ pmemtester uses `nproc` which returns the number of hardware threads (including 
 - More threads with smaller allocations may actually improve test coverage by exercising more memory controller interleaving patterns
 - Document this trade-off and consider an optional `--threads N` override for users who want explicit control
 
-## Time Estimation
+## 6. Time Estimation
 
 Run a short calibration test at the start of every run to estimate completion time:
 
@@ -83,17 +70,7 @@ Run a short calibration test at the start of every run to estimate completion ti
 - The calibration run also serves as a quick sanity check that memtester works before committing to a long run
 - Consider caching calibration results per-host (MB/s throughput) to skip the sample on subsequent runs
 
-## v0.2: Coloured Output (Traffic Lights)
-
-Add coloured pass/fail indicators to terminal output:
-
-- **Green**: PASS — all memtester instances passed, no EDAC errors
-- **Red**: FAIL — memtester failure or EDAC uncorrectable error (UE)
-- **Yellow**: non-fatal fail — EDAC correctable error only (CE, single-bit ECC)
-
-The failure output should specify the source: whether the failure came from EDAC or memtester (currently the verdict is opaque about which subsystem detected the problem).
-
-## Sequential Rolling RAM Test
+## 7. Sequential Rolling RAM Test
 
 Investigate testing RAM sequentially in chunks, so the total tested RAM exceeds what can be tested in a single pass:
 
@@ -103,7 +80,7 @@ Investigate testing RAM sequentially in chunks, so the total tested RAM exceeds 
 - Consider a `--rolling` or `--sequential` mode
 - Need to investigate whether the kernel reallocates the same physical pages across runs or whether this genuinely tests different physical memory
 
-## Single Binary: Port to C and Integrate with memtester
+## 8. Single Binary: Port to C and Integrate with memtester
 
 Rewrite pmemtester as a C program that integrates memtester's testing logic directly, producing a single `pmemtester` executable with no external dependency on the `memtester` binary.
 
@@ -128,7 +105,7 @@ Considerations:
 - Cross-platform portability: memtester supports non-Linux systems; pmemtester is Linux-only (EDAC dependency)
 - Build system: autotools or meson, with the test suite ported from bats to a C test framework or kept as integration tests
 
-## FAQ
+## 9. FAQ
 
 Add more items to [FAQ.md](FAQ.md). Candidate topics:
 

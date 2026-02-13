@@ -13,7 +13,7 @@ test-integration:
 	bats test/integration/
 
 coverage:
-	kcov --include-path=./lib,./pmemtester ./coverage bats test/unit/ test/integration/
+	kcov --include-path=./lib,./pmemtester ./coverage $(shell which bats) test/unit/ test/integration/
 	@echo "Coverage report: ./coverage/index.html"
 
 lint:
@@ -33,6 +33,10 @@ install:
 	install -m 644 lib/*.sh $(DESTDIR)$(PREFIX)/lib/$(NAME)/
 	@# Patch installed script to source from installed lib location
 	sed -i 's|"$${SCRIPT_DIR}"/lib|$(PREFIX)/lib/$(NAME)|' $(DESTDIR)$(PREFIX)/bin/pmemtester
+ifdef MEMTESTER_DIR
+	@# Patch default memtester directory for distro packaging (e.g., /usr/bin)
+	sed -i 's|DEFAULT_MEMTESTER_DIR="$${DEFAULT_MEMTESTER_DIR:-/usr/local/bin}"|DEFAULT_MEMTESTER_DIR="$(MEMTESTER_DIR)"|' $(DESTDIR)$(PREFIX)/lib/$(NAME)/cli.sh
+endif
 	@echo "Installed $(NAME) $(VERSION) to $(PREFIX)"
 
 uninstall:
