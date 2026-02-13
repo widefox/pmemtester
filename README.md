@@ -8,8 +8,7 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) -- t
 
 ## Features
 
-- Runs one memtester instance per physical CPU core to saturate the memory bus on any system
-- Runs one memtester per physical core, maximising memory bandwidth without SMT contention regression (see [FAQ](FAQ.md#why-one-memtester-per-core-instead-of-one-per-thread))
+- Runs one memtester instance per CPU core to saturate the memory bus on any system
 - Configurable RAM percentage (default 90% of available)
 - RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
