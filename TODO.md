@@ -83,7 +83,43 @@ Run a short calibration test at the start of every run to estimate completion ti
 
 **Out of scope.** Physical memory addressing requires kernel-level cooperation (`move_pages()`, custom module walking `page_struct`). Userspace `mmap`/`malloc` + `mlock` provides no control over which physical frames are allocated, so freeing and reallocating cannot guarantee coverage of different physical memory.
 
-## 9. Single Binary: Port to C and Integrate with memtester
+memtester's `-p` flag (physical address mode via `/dev/mem`) was evaluated as an alternative for sweeping physical RAM. **Not feasible:**
+
+- `CONFIG_STRICT_DEVMEM=y` (default on all major distributions since ~2008) blocks `/dev/mem` access to System RAM above 1 MB; below 1 MB reads return zeros and writes are silently discarded
+- `CONFIG_IO_STRICT_DEVMEM=y` further restricts even I/O memory regions claimed by active drivers
+- Even with protections disabled (`iomem=relaxed` boot parameter or kernel rebuild), writing test patterns to in-use physical addresses (kernel code, page tables, slab allocator, DMA buffers, other processes) would crash the system immediately
+- The `-p` flag was designed for testing memory-mapped I/O devices (PCI BARs, FPGA registers), not general-purpose RAM testing
+- Kernel memory offlining (`echo offline > /sys/devices/system/memory/memoryN/state`) is theoretically possible but fragile -- the kernel refuses to offline sections containing unmovable pages
+
+For exhaustive physical RAM testing, use a standalone boot-time tester (MemTest86, MemTest86+) where the tool has exclusive access to the full physical address space before the OS loads.
+
+## 9. Virtual-to-Physical Address Translation for DIMM-Level Failure Correlation
+
+Use `/proc/<pid>/pagemap` to translate virtual addresses to physical page frame numbers, enabling correlation between memtester failures and specific DIMMs via EDAC physical address reporting.
+
+Rationale:
+- memtester operates on virtual addresses and cannot identify which physical DIMM a failure maps to
+- EDAC error reports use physical addresses (memory controller, csrow, channel, page offset)
+- `/proc/<pid>/pagemap` provides a userspace-readable virtual-to-physical translation without requiring `/dev/mem` or any kernel modification
+- Bridging this gap would let pmemtester report "memtester failure at virtual address X = physical address Y = DIMM Z" instead of just "memtester failed on core N"
+
+Approach:
+- After a memtester failure, read `/proc/<pid>/pagemap` for the failing memtester process
+- Each 8-byte pagemap entry contains the physical page frame number (PFN) for a virtual page (bits 0-54)
+- Multiply PFN by page size (4096) to get the physical address
+- Cross-reference the physical address with EDAC sysfs to identify the memory controller, csrow, channel, rank, and bank
+- Report the mapping in the master log and per-thread logs
+
+Considerations:
+- Reading `/proc/<pid>/pagemap` requires `CAP_SYS_ADMIN` or root (restricted since kernel 4.0 to prevent physical address leaks -- KASLR bypass mitigation)
+- The pagemap is only useful while the process is alive and its pages are still mapped; must read before the memtester process exits or its address space is torn down
+- Physical page assignment can change if pages are migrated (transparent hugepages, compaction, NUMA balancing), so the translation is a snapshot, not a guarantee
+- Hugepages (2 MB / 1 GB) shift the PFN interpretation; detect via bit 22 of the pagemap entry (page size flag) or via `/proc/<pid>/smaps`
+- This is a diagnostic enhancement only -- it does not change which memory is tested or how
+- In Bash, reading the binary pagemap format requires `od` or `xxd` plus arithmetic; a C helper or Python script may be more practical
+- Could be gated behind a `--show-physical` flag (off by default, since it requires elevated privileges)
+
+## 10. Single Binary: Port to C and Integrate with memtester
 
 Rewrite pmemtester as a C program that integrates memtester's testing logic directly, producing a single `pmemtester` executable with no external dependency on the `memtester` binary.
 
@@ -108,7 +144,7 @@ Considerations:
 - Cross-platform portability: memtester supports non-Linux systems; pmemtester is Linux-only (EDAC dependency)
 - Build system: autotools or meson, with the test suite ported from bats to a C test framework or kept as integration tests
 
-## 10. Optional stressapptest Second Pass
+## 11. Optional stressapptest Second Pass
 
 Run stressapptest automatically after the memtester pass to combine deterministic pattern testing with randomised bus-contention stress testing in a single invocation.
 
@@ -135,7 +171,7 @@ Considerations:
 - The `--seconds` flag controls stressapptest duration directly
 - Log stressapptest stdout/stderr to a dedicated log file in the log directory (e.g., `stressapptest.log`)
 
-## 11. Stop on First Error
+## 12. Stop on First Error
 
 Add a `--stop-on-error` flag that terminates the run immediately when any error is detected, rather than waiting for all memtester instances to complete.
 
@@ -159,6 +195,6 @@ Considerations:
 - Correctable errors (CE) with `--allow-ce` should not trigger early stop -- only UE or memtester failure should
 - The polling loop must not interfere with memtester performance; a simple shell `sleep`/`diff` loop on EDAC sysfs counters should have negligible overhead
 
-## 12. FAQ: Interpreting memtester test names
+## 13. FAQ: Interpreting memtester test names
 
 Add an [FAQ.md](FAQ.md) entry explaining which pattern tests what (stuck address, walking ones/zeros, checkerboard, etc.) and what class of fault each one detects.
