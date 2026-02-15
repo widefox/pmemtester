@@ -346,9 +346,14 @@ See [TODO.md](TODO.md) for planned improvements including EDAC region correlatio
 | stress-ng | Userspace | Yes | No | Yes (monthly releases) | GPL-2.0 |
 | DimmReaper | Userspace | Yes | No | Low (2024) | GPL-2.0 |
 | ocp-diag-memtester | Userspace (Python) | No | No | Low (2023) | Apache-2.0 |
+| mprime/Prime95 | Userspace | Yes | No | Yes | Freeware |
+
+### EDAC Monitoring Utilities
+
+| Tool | Environment | Parallel | ECC CE Detection | Active | License |
+|------|-------------|----------|-----------------|--------|---------|
 | rasdaemon | Userspace daemon | N/A (monitor) | **Yes** (EDAC tracing) | Yes (v0.8.4, 2025) | GPL-2.0 |
 | edac-utils | Userspace | N/A (reporting) | **Yes** (EDAC sysfs) | No (dormant since 2008) | GPL-2.0 |
-| mprime/Prime95 | Userspace | Yes | No | Yes | Freeware |
 
 ### Standalone Boot Tools
 
