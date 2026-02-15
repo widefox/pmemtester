@@ -128,7 +128,7 @@ Specify an explicit duration with `--stressapptest-seconds N` (in seconds).
 
 ### Memory
 
-stressapptest receives the same total RAM as the memtester pass: `ram_per_core_mb * core_count`. For example, if pmemtester allocated 3584 MB per core across 4 cores, stressapptest gets `3584 * 4 = 14336` MB. The thread count (`-m`) matches the core count.
+stressapptest receives the same total RAM as the memtester pass: `ram_per_core_mb * core_count`. For example, if pmemtester allocated 4800 MB per core across 48 cores, stressapptest gets `4800 * 48 = 230400` MB. The thread count (`-m`) matches the core count.
 
 ### EDAC
 
@@ -203,102 +203,100 @@ pmemtester creates a log directory at `/tmp/pmemtester.<PID>/` (or `--log-dir`):
 ├── master.log                  # Aggregated log with all thread results
 ├── thread_0.log                # Per-thread memtester output
 ├── thread_1.log
-├── thread_2.log
-├── thread_3.log
+├── ...
+├── thread_47.log
 ├── stressapptest.log           # stressapptest output (when enabled)
 ├── edac_messages_before.txt    # EDAC dmesg snapshot before test
-├── edac_messages_after.txt     # EDAC dmesg snapshot after test
+├── edac_messages_mid.txt       # EDAC dmesg snapshot after Phase 1
+├── edac_messages_after.txt     # EDAC dmesg snapshot after all phases
 ├── edac_counters_before.txt    # EDAC sysfs counters before test
-└── edac_counters_after.txt     # EDAC sysfs counters after test
+├── edac_counters_mid.txt       # EDAC sysfs counters after Phase 1
+└── edac_counters_after.txt     # EDAC sysfs counters after all phases
 ```
 
 ### master.log contents
 
 ```text
-[2026-02-10 14:30:01] [INFO] Starting pmemtester: 3584MB x 4 cores
+[2026-02-15 09:00:00] [INFO] pmemtester started: 230400MB across 48 cores, 1 iteration(s)
+[2026-02-15 09:00:00] [INFO] Phase 1 (memtester) started: 4800MB x 48 instances
 --- Thread 0 ---
-[2026-02-10 14:30:01] [INFO] memtester 3584M started (PID 12346)
-[2026-02-10 14:35:22] [INFO] memtester 3584M completed (exit 0)
+[2026-02-15 09:00:00] [INFO] Starting memtester: 4800M x 1 iterations
+[2026-02-15 11:00:02] [INFO] PASSED
 --- Thread 1 ---
-[2026-02-10 14:30:01] [INFO] memtester 3584M started (PID 12347)
-[2026-02-10 14:35:19] [INFO] memtester 3584M completed (exit 0)
---- Thread 2 ---
-[2026-02-10 14:30:01] [INFO] memtester 3584M started (PID 12348)
-[2026-02-10 14:35:20] [INFO] memtester 3584M completed (exit 0)
---- Thread 3 ---
-[2026-02-10 14:30:01] [INFO] memtester 3584M started (PID 12349)
-[2026-02-10 14:35:21] [INFO] memtester 3584M completed (exit 0)
-[2026-02-10 14:35:22] [INFO] Starting stressapptest: 14336MB, 321s, 4 threads
-[2026-02-10 14:40:43] [INFO] stressapptest PASSED
-[2026-02-10 14:40:43] [INFO] PASS: All tests passed, no EDAC errors
+[2026-02-15 09:00:00] [INFO] Starting memtester: 4800M x 1 iterations
+[2026-02-15 10:59:58] [INFO] PASSED
+...
+--- Thread 47 ---
+[2026-02-15 09:00:00] [INFO] Starting memtester: 4800M x 1 iterations
+[2026-02-15 11:00:01] [INFO] PASSED
+[2026-02-15 11:00:02] [INFO] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
+[2026-02-15 11:00:02] [INFO] EDAC after Phase 1: no errors detected
+[2026-02-15 11:00:02] [INFO] Phase 2 (stressapptest) started: 230400MB, 7202s, 48 threads
+[2026-02-15 11:00:02] [INFO] Phase 2 ETA: 2026-02-15 13:00:04 (120m 2s)
+[2026-02-15 11:00:02] [INFO] Starting stressapptest: 230400MB, 7202s, 48 threads
+[2026-02-15 13:00:04] [INFO] stressapptest PASSED
+[2026-02-15 13:00:04] [INFO] Phase 2 (stressapptest) finished: PASSED (120m 2s)
+[2026-02-15 13:00:04] [INFO] Total duration: 240m 4s
+[2026-02-15 13:00:04] [INFO] PASS: All tests passed, no EDAC errors
 ```
 
 ## Example Output: PASS
 
+On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels):
+
 ```console
-$ sudo pmemtester --percent 80 --iterations 1
+$ sudo pmemtester --percent 90 --log-dir /tmp/memtest-run
+[2026-02-15 09:00:00] pmemtester started: 230400MB across 48 cores, 1 iteration(s)
+[2026-02-15 09:00:00] Phase 1 (memtester) started: 4800MB x 48 instances
+[2026-02-15 11:00:02] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
+[2026-02-15 11:00:02] EDAC after Phase 1: no errors detected
+[2026-02-15 11:00:02] Phase 2 (stressapptest) started: 230400MB, 7202s, 48 threads
+[2026-02-15 11:00:02] Phase 2 ETA: 2026-02-15 13:00:04 (120m 2s)
+[2026-02-15 13:00:04] Phase 2 (stressapptest) finished: PASSED (120m 2s)
+[2026-02-15 13:00:04] Total duration: 240m 4s
 PASS
 $ echo $?
 0
 ```
 
-With `--log-dir /tmp/memtest-run`:
-
-```console
-$ sudo pmemtester --percent 80 --log-dir /tmp/memtest-run
-PASS
-$ cat /tmp/memtest-run/master.log
-[2026-02-10 14:30:01] [INFO] Starting pmemtester: 3072MB x 8 cores
---- Thread 0 ---
-[2026-02-10 14:30:01] [INFO] memtester 3072M completed (exit 0)
---- Thread 1 ---
-[2026-02-10 14:30:01] [INFO] memtester 3072M completed (exit 0)
-...
-[2026-02-10 14:38:45] [INFO] PASS: All tests passed, no EDAC errors
-```
-
 ## Example Output: FAIL (memtester error)
 
-When memtester detects a memory error:
+When memtester detects a memory error (thread 31 fails after 45 minutes while others complete the full 2 hours):
 
 ```console
 $ sudo pmemtester --percent 90
-FAIL
+[2026-02-15 09:00:00] pmemtester started: 230400MB across 48 cores, 1 iteration(s)
+[2026-02-15 09:00:00] Phase 1 (memtester) started: 4800MB x 48 instances
+[2026-02-15 11:00:02] Phase 1 (memtester) finished: 1 of 48 instances FAILED (120m 2s)
+[2026-02-15 11:00:02] EDAC after Phase 1: no errors detected
+[2026-02-15 11:00:02] Total duration: 120m 2s
+FAIL (memtester)
 $ echo $?
 1
-$ cat /tmp/pmemtester.54321/master.log
-[2026-02-10 15:00:01] [INFO] Starting pmemtester: 3584MB x 4 cores
---- Thread 0 ---
-[2026-02-10 15:00:01] [INFO] memtester 3584M completed (exit 0)
---- Thread 1 ---
-[2026-02-10 15:00:01] [INFO] memtester 3584M completed (exit 0)
---- Thread 2 ---
-[2026-02-10 15:05:12] [ERROR] memtester 3584M FAILED (exit 1)
---- Thread 3 ---
-[2026-02-10 15:00:01] [INFO] memtester 3584M completed (exit 0)
-[2026-02-10 15:05:12] [INFO] FAIL: memtester_result=1 edac_result=0
+```
+
+In the master.log, the failing thread is identified:
+
+```text
+--- Thread 31 ---
+[2026-02-15 09:00:00] [INFO] Starting memtester: 4800M x 1 iterations
+[2026-02-15 09:45:12] [INFO] FAILED (exit code 1)
 ```
 
 ## Example Output: FAIL (EDAC errors)
 
-When hardware error counters increase during the test:
+When hardware error counters increase during the test (all memtester instances pass, but EDAC detects correctable errors):
 
 ```console
-$ sudo pmemtester --percent 90
-FAIL
+$ sudo pmemtester --percent 90 --stressapptest off
+[2026-02-15 09:00:00] pmemtester started: 230400MB across 48 cores, 1 iteration(s)
+[2026-02-15 09:00:00] Phase 1 (memtester) started: 4800MB x 48 instances
+[2026-02-15 11:00:02] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
+[2026-02-15 11:00:02] EDAC after Phase 1: correctable errors (CE) detected
+[2026-02-15 11:00:02] Total duration: 120m 2s
+FAIL (EDAC: ce_only)
 $ echo $?
 1
-$ cat /tmp/pmemtester.54322/master.log
-[2026-02-10 16:00:01] [INFO] Starting pmemtester: 3584MB x 4 cores
---- Thread 0 ---
-[2026-02-10 16:00:01] [INFO] memtester 3584M completed (exit 0)
---- Thread 1 ---
-[2026-02-10 16:00:01] [INFO] memtester 3584M completed (exit 0)
---- Thread 2 ---
-[2026-02-10 16:00:01] [INFO] memtester 3584M completed (exit 0)
---- Thread 3 ---
-[2026-02-10 16:00:01] [INFO] memtester 3584M completed (exit 0)
-[2026-02-10 16:05:30] [INFO] FAIL: memtester_result=0 edac_result=1
 $ diff /tmp/pmemtester.54322/edac_counters_before.txt /tmp/pmemtester.54322/edac_counters_after.txt
 3c3
 < mc0/csrow0/ce_count:0
@@ -306,7 +304,7 @@ $ diff /tmp/pmemtester.54322/edac_counters_before.txt /tmp/pmemtester.54322/edac
 > mc0/csrow0/ce_count:3
 ```
 
-In this case all memtester processes passed, but 3 correctable ECC errors (ce_count) were detected by EDAC hardware monitoring during the run.
+In this case all 48 memtester instances passed, but 3 correctable ECC errors (ce_count) were detected by EDAC hardware monitoring during the run.
 
 ## Execution Flow
 
@@ -321,7 +319,7 @@ parse_args --> validate_args --> find_memtester --> resolve_stressapptest
 
 ## Testing
 
-248 tests (202 unit + 46 integration).
+281 tests (223 unit + 58 integration).
 
 ```bash
 make test              # Run all tests (unit + integration)
