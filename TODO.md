@@ -144,7 +144,7 @@ Considerations:
 - Cross-platform portability: memtester supports non-Linux systems; pmemtester is Linux-only (EDAC dependency)
 - Build system: autotools or meson, with the test suite ported from bats to a C test framework or kept as integration tests
 
-## 12. Stop on First Error
+## 11. Stop on First Error
 
 Add a `--stop-on-error` flag that terminates the run immediately when any error is detected, rather than waiting for all memtester instances to complete.
 
@@ -168,6 +168,6 @@ Considerations:
 - Correctable errors (CE) with `--allow-ce` should not trigger early stop -- only UE or memtester failure should
 - The polling loop must not interfere with memtester performance; a simple shell `sleep`/`diff` loop on EDAC sysfs counters should have negligible overhead
 
-## 13. FAQ: Interpreting memtester test names
+## 12. FAQ: Interpreting memtester test names
 
 Add an [FAQ.md](FAQ.md) entry explaining which pattern tests what (stuck address, walking ones/zeros, checkerboard, etc.) and what class of fault each one detects.

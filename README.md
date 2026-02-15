@@ -106,6 +106,42 @@ This binds both the CPU threads and memory allocation to the specified NUMA node
 
 **Note:** `--percent 90` in this case applies to the available memory on that NUMA node, not the whole system. Check per-node memory with `numactl --hardware`.
 
+## stressapptest Second Pass
+
+pmemtester optionally runs [stressapptest](https://github.com/stressapptest/stressapptest) as a second pass after memtester completes. This combines memtester's deterministic pattern testing (finds stuck bits and coupling faults) with stressapptest's randomised bus-contention stress testing (finds timing margin failures and electrically weak RAM). See [Testing philosophy](#testing-philosophy-microscope-hammer-chaos-monkey) for why both approaches are complementary.
+
+### Modes
+
+The `--stressapptest` flag controls behaviour:
+
+| Mode | Behaviour |
+|------|-----------|
+| `auto` (default) | Silently skips if stressapptest binary is not found. Skips if memtester failed (no point stress-testing memory already known bad). Runs if binary is found and memtester passed. |
+| `on` | Forces stressapptest. Fails immediately if binary is not found. Runs even if memtester failed (useful for comprehensive diagnostics). |
+| `off` | Disables stressapptest entirely. |
+
+### Duration
+
+By default (`--stressapptest-seconds 0`), the stressapptest pass runs for the same wall-clock time as the memtester pass. If memtester took 5 minutes, stressapptest runs for 5 minutes. This ensures comparable stress coverage without requiring the user to estimate an appropriate duration. The minimum is clamped to 1 second.
+
+Specify an explicit duration with `--stressapptest-seconds N` (in seconds).
+
+### Memory
+
+stressapptest receives the same total RAM as the memtester pass: `ram_per_core_mb * core_count`. For example, if pmemtester allocated 3584 MB per core across 4 cores, stressapptest gets `3584 * 4 = 14336` MB. The thread count (`-m`) matches the core count.
+
+### EDAC
+
+EDAC snapshots are taken once before the memtester pass and once after the stressapptest pass (or after memtester if stressapptest is skipped). This means the EDAC before/after comparison spans both passes — any hardware error during either pass causes a FAIL.
+
+### Verdict
+
+The final verdict combines three sources: memtester exit codes, stressapptest exit code (when enabled), and EDAC counter changes. Any failure from any source causes a FAIL. The `fail_sources` field in the master log identifies which component(s) failed.
+
+### stressapptest output
+
+stressapptest output is captured in `stressapptest.log` in the log directory. Start and result are also logged to `master.log`.
+
 ## Source Layout
 
 ```tree
@@ -115,27 +151,31 @@ PROMPT.md                       # Original design specification
 CLAUDE.md                       # Developer guide for Claude Code
 lib/
 ├── cli.sh                      # Argument parsing and validation
-├── math_utils.sh               # Integer arithmetic utilities
-├── unit_convert.sh             # kB/MB/bytes conversions
-├── system_detect.sh            # RAM and core count detection
-├── memtester_mgmt.sh           # Find and validate memtester binary
-├── memlock.sh                  # Kernel memory lock management
+├── color.sh                    # Coloured terminal output (PASS/FAIL/WARN)
 ├── edac.sh                     # EDAC message/counter monitoring
-├── ram_calc.sh                 # RAM allocation calculations
+├── logging.sh                  # Per-thread and master logging
+├── math_utils.sh               # Integer arithmetic utilities
+├── memlock.sh                  # Kernel memory lock management
+├── memtester_mgmt.sh           # Find and validate memtester binary
 ├── parallel.sh                 # Parallel memtester execution
-└── logging.sh                  # Per-thread and master logging
+├── ram_calc.sh                 # RAM allocation calculations
+├── stressapptest_mgmt.sh       # Find, validate, and run stressapptest
+├── system_detect.sh            # RAM and core count detection
+└── unit_convert.sh             # kB/MB/bytes conversions
 test/
 ├── unit/                       # Unit tests (one .bats per lib)
 │   ├── cli.bats
-│   ├── math_utils.bats
-│   ├── unit_convert.bats
-│   ├── system_detect.bats
-│   ├── memtester_mgmt.bats
-│   ├── memlock.bats
+│   ├── color.bats
 │   ├── edac.bats
-│   ├── ram_calc.bats
+│   ├── logging.bats
+│   ├── math_utils.bats
+│   ├── memlock.bats
+│   ├── memtester_mgmt.bats
 │   ├── parallel.bats
-│   └── logging.bats
+│   ├── ram_calc.bats
+│   ├── stressapptest_mgmt.bats
+│   ├── system_detect.bats
+│   └── unit_convert.bats
 ├── integration/
 │   ├── full_run.bats           # End-to-end tests with mocked commands
 │   └── install.bats            # Install target tests (MEMTESTER_DIR/STRESSAPPTEST_DIR patching)
@@ -165,6 +205,7 @@ pmemtester creates a log directory at `/tmp/pmemtester.<PID>/` (or `--log-dir`):
 ├── thread_1.log
 ├── thread_2.log
 ├── thread_3.log
+├── stressapptest.log           # stressapptest output (when enabled)
 ├── edac_messages_before.txt    # EDAC dmesg snapshot before test
 ├── edac_messages_after.txt     # EDAC dmesg snapshot after test
 ├── edac_counters_before.txt    # EDAC sysfs counters before test
@@ -187,7 +228,9 @@ pmemtester creates a log directory at `/tmp/pmemtester.<PID>/` (or `--log-dir`):
 --- Thread 3 ---
 [2026-02-10 14:30:01] [INFO] memtester 3584M started (PID 12349)
 [2026-02-10 14:35:21] [INFO] memtester 3584M completed (exit 0)
-[2026-02-10 14:35:22] [INFO] PASS: All memtesters passed, no EDAC errors
+[2026-02-10 14:35:22] [INFO] Starting stressapptest: 14336MB, 321s, 4 threads
+[2026-02-10 14:40:43] [INFO] stressapptest PASSED
+[2026-02-10 14:40:43] [INFO] PASS: All tests passed, no EDAC errors
 ```
 
 ## Example Output: PASS
@@ -211,7 +254,7 @@ $ cat /tmp/memtest-run/master.log
 --- Thread 1 ---
 [2026-02-10 14:30:01] [INFO] memtester 3072M completed (exit 0)
 ...
-[2026-02-10 14:38:45] [INFO] PASS: All memtesters passed, no EDAC errors
+[2026-02-10 14:38:45] [INFO] PASS: All tests passed, no EDAC errors
 ```
 
 ## Example Output: FAIL (memtester error)
@@ -268,15 +311,17 @@ In this case all memtester processes passed, but 3 correctable ECC errors (ce_co
 ## Execution Flow
 
 ```workflow
-parse_args --> validate_args --> find_memtester --> calculate_test_ram_kb
-    --> get_core_count --> divide_ram_per_core_mb --> check_memlock_sufficient
-    --> init_logs --> [EDAC before] --> run_all_memtesters --> wait_and_collect
-    --> [EDAC after] --> aggregate_logs --> PASS/FAIL
+parse_args --> validate_args --> find_memtester --> resolve_stressapptest
+    --> calculate_test_ram_kb --> get_core_count --> divide_ram_per_core_mb
+    --> check_memlock_sufficient --> init_logs --> [EDAC before]
+    --> run_all_memtesters --> wait_and_collect
+    --> [conditional stressapptest] --> [EDAC after]
+    --> aggregate_logs --> PASS/FAIL
 ```
 
 ## Testing
 
-194 tests (167 unit + 27 integration).
+248 tests (202 unit + 46 integration).
 
 ```bash
 make test              # Run all tests (unit + integration)
@@ -320,8 +365,8 @@ Distributions that package memtester (all install to `/usr/bin/memtester`):
 
 ## Requirements
 
-- **memtester** binary (not bundled) -- [pyropus.ca](https://pyropus.ca./software/memtester/)
-- **stressapptest** binary (optional -- auto mode silently skips if absent) -- [github.com/stressapptest](https://github.com/stressapptest/stressapptest)
+- **memtester** binary (not bundled) -- [pyropus.ca](https://pyropus.ca./software/memtester/). pmemtester looks for `memtester` in `/usr/local/bin` by default. Override at runtime with `--memtester-dir DIR`, or patch the default at install time with `make install MEMTESTER_DIR=/usr/bin` (see [Distro packaging](#distro-packaging)).
+- **stressapptest** binary (optional -- auto mode silently skips if absent) -- [github.com/stressapptest](https://github.com/stressapptest/stressapptest). pmemtester looks for `stressapptest` in `/usr/local/bin` by default. Override at runtime with `--stressapptest-dir DIR`, or patch the default at install time with `make install STRESSAPPTEST_DIR=/usr/bin`.
 - Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
 - `lscpu` (from util-linux; falls back to `nproc` from coreutils)
 - EDAC support (optional -- gracefully skipped if absent)
