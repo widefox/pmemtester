@@ -100,7 +100,7 @@ MOCK
     run_stressapptest "${TEST_DIR}/stressapptest" 60 512 4 "$TEST_DIR"
     grep -q -- "-s 60" "${TEST_DIR}/stressapptest.log"
     grep -q -- "-M 512" "${TEST_DIR}/stressapptest.log"
-    grep -q -- "--mem_threads 4" "${TEST_DIR}/stressapptest.log"
+    grep -q -- "-m 4" "${TEST_DIR}/stressapptest.log"
 }
 
 @test "run_stressapptest logs start to master log" {

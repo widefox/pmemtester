@@ -340,7 +340,7 @@ See [TODO.md](TODO.md) for planned improvements including EDAC region correlatio
 
 | Tool | Environment | Parallel | ECC CE Detection | Active | License |
 |------|-------------|----------|-----------------|--------|---------|
-| **pmemtester** | Userspace (Bash) | Yes | **Yes** (EDAC before/after) | Yes (v0.2, 2026) | GPL-2.0 |
+| **pmemtester** | Userspace | Yes | **Yes** (EDAC before/after) | Yes (v0.3, 2026) | GPL-2.0 |
 | memtester | Userspace | No | No | Yes (v4.7.1, 2024) | GPL-2.0 |
 | stressapptest | Userspace | Yes | No | Low (v1.0.11, 2023) | Apache-2.0 |
 | stress-ng | Userspace | Yes | No | Yes (monthly releases) | GPL-2.0 |

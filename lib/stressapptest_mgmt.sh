@@ -39,7 +39,7 @@ run_stressapptest() {
 
     log_master "Starting stressapptest: ${size_mb}MB, ${seconds}s, ${threads} threads" "$log_dir"
 
-    if "$path" -s "$seconds" -M "$size_mb" --mem_threads "$threads" > "$log_file" 2>&1; then
+    if "$path" -s "$seconds" -M "$size_mb" -m "$threads" > "$log_file" 2>&1; then
         log_master "stressapptest PASSED" "$log_dir"
         return 0
     else

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pmemtester - Parallel wrapper for memtester
-# Version: 0.2
+# Version: 0.3
 # Author: Johnathon Weare <jrweare@gmail.com>
 # URL: https://github.com/widefox/pmemtester
 # SPDX-License-Identifier: GPL-2.0-only
@@ -8,7 +8,7 @@
 set -euo pipefail
 
 # shellcheck disable=SC2034
-pmemtester_version="0.2"
+pmemtester_version="0.3"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
