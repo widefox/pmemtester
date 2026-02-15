@@ -37,6 +37,10 @@ ifdef MEMTESTER_DIR
 	@# Patch default memtester directory for distro packaging (e.g., /usr/bin)
 	sed -i 's|DEFAULT_MEMTESTER_DIR="$${DEFAULT_MEMTESTER_DIR:-/usr/local/bin}"|DEFAULT_MEMTESTER_DIR="$(MEMTESTER_DIR)"|' $(DESTDIR)$(PREFIX)/lib/$(NAME)/cli.sh
 endif
+ifdef STRESSAPPTEST_DIR
+	@# Patch default stressapptest directory for distro packaging
+	sed -i 's|DEFAULT_STRESSAPPTEST_DIR="$${DEFAULT_STRESSAPPTEST_DIR:-/usr/local/bin}"|DEFAULT_STRESSAPPTEST_DIR="$(STRESSAPPTEST_DIR)"|' $(DESTDIR)$(PREFIX)/lib/$(NAME)/cli.sh
+endif
 	@echo "Installed $(NAME) $(VERSION) to $(PREFIX)"
 
 uninstall:

@@ -29,6 +29,9 @@ MOCK
 
     # Mock ulimit to be unlimited
     export MOCK_ULIMIT_L="unlimited"
+
+    # Default: no stressapptest (auto mode finds nothing, skips)
+    export TEST_STRESSAPPTEST_OFF="--stressapptest-dir ${TEST_LOG_DIR}/no_sat_bin"
 }
 
 teardown() {
@@ -41,7 +44,8 @@ teardown() {
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --percent 90
+        --percent 90 \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial "PASS"
 }
@@ -56,7 +60,8 @@ MOCK
 
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$TEST_LOG_DIR"
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
     assert_failure
     assert_output --partial "FAIL"
 }
@@ -66,7 +71,8 @@ MOCK
 
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$TEST_LOG_DIR"
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial "PASS"
 }
@@ -89,7 +95,8 @@ MOCK
 
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$TEST_LOG_DIR"
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
     assert_failure
     assert_output --partial "FAIL"
 }
@@ -99,7 +106,8 @@ MOCK
 
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$TEST_LOG_DIR"
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
     assert_failure
 }
 
@@ -107,7 +115,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --percent 50
+        --percent 50 \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial "PASS"
 }
@@ -117,7 +126,8 @@ MOCK
 
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$TEST_LOG_DIR"
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial "PASS"
 }
@@ -126,7 +136,8 @@ MOCK
     local log_dir="${TEST_LOG_DIR}/testlogs"
     "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$log_dir"
+        --log-dir "$log_dir" \
+        $TEST_STRESSAPPTEST_OFF
     [[ -f "${log_dir}/master.log" ]]
     [[ -f "${log_dir}/thread_0.log" ]]
     [[ -f "${log_dir}/thread_1.log" ]]
@@ -152,7 +163,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --allow-ce
+        --allow-ce \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial "PASS"
     assert_output --partial "WARNING"
@@ -176,7 +188,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --allow-ce
+        --allow-ce \
+        $TEST_STRESSAPPTEST_OFF
     assert_failure
     assert_output --partial "FAIL"
 }
@@ -200,7 +213,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --allow-ce
+        --allow-ce \
+        $TEST_STRESSAPPTEST_OFF
     assert_failure
     assert_output --partial "FAIL"
 }
@@ -222,7 +236,8 @@ MOCK
 
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$TEST_LOG_DIR"
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
     assert_failure
     assert_output --partial "FAIL"
 }
@@ -245,7 +260,8 @@ MOCK
     local log_dir="${TEST_LOG_DIR}/logs_ce"
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$log_dir"
+        --log-dir "$log_dir" \
+        $TEST_STRESSAPPTEST_OFF
     # Check master.log contains CE classification
     [[ -f "${log_dir}/master.log" ]]
     grep -q "ce_only" "${log_dir}/master.log"
@@ -269,7 +285,8 @@ MOCK
     local log_dir="${TEST_LOG_DIR}/logs_ue"
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$log_dir"
+        --log-dir "$log_dir" \
+        $TEST_STRESSAPPTEST_OFF
     # Check master.log contains UE classification
     [[ -f "${log_dir}/master.log" ]]
     grep -q "ue_only" "${log_dir}/master.log"
@@ -281,7 +298,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --allow-ce
+        --allow-ce \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial "PASS"
     refute_output --partial "WARNING"
@@ -293,7 +311,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --color on
+        --color on \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial $'\033[32m'
     assert_output --partial "PASS"
@@ -303,7 +322,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --color off
+        --color off \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial "PASS"
     refute_output --partial $'\033['
@@ -320,7 +340,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --color off
+        --color off \
+        $TEST_STRESSAPPTEST_OFF
     assert_failure
     assert_output --partial "FAIL"
     assert_output --partial "memtester"
@@ -344,7 +365,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --color off
+        --color off \
+        $TEST_STRESSAPPTEST_OFF
     assert_failure
     assert_output --partial "FAIL"
     assert_output --partial "EDAC"
@@ -360,7 +382,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --color on
+        --color on \
+        $TEST_STRESSAPPTEST_OFF
     assert_failure
     assert_output --partial $'\033[31m'
     assert_output --partial "FAIL"
@@ -370,7 +393,8 @@ MOCK
     local log_dir="${TEST_LOG_DIR}/logs_cores"
     "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$log_dir"
+        --log-dir "$log_dir" \
+        $TEST_STRESSAPPTEST_OFF
     [[ -f "${log_dir}/master.log" ]]
     grep -q "cores" "${log_dir}/master.log"
     ! grep -q "threads" "${log_dir}/master.log"
@@ -384,9 +408,315 @@ MOCK
 
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
-        --log-dir "$TEST_LOG_DIR"
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial "PASS"
+}
+
+# stressapptest integration tests
+
+@test "stressapptest auto mode skips when not found" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest auto \
+        --stressapptest-dir "${TEST_LOG_DIR}/no_sat"
+    assert_success
+    assert_output --partial "PASS"
+}
+
+@test "stressapptest auto mode runs when found" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest auto \
+        --stressapptest-dir "$sat_dir"
+    assert_success
+    assert_output --partial "PASS"
+}
+
+@test "stressapptest auto mode skips after memtester failure" {
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+exit 1
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "should not run"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest auto \
+        --stressapptest-dir "$sat_dir"
+    assert_failure
+    # stressapptest.log should not exist since it was skipped
+    [[ ! -f "${TEST_LOG_DIR}/stressapptest.log" ]]
+}
+
+@test "stressapptest on mode passes" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    assert_success
+    assert_output --partial "PASS"
+}
+
+@test "stressapptest on mode fails when binary missing" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-dir "${TEST_LOG_DIR}/no_sat"
+    assert_failure
+}
+
+@test "stressapptest on mode still runs after memtester failure" {
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+exit 1
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    assert_failure
+    assert_output --partial "FAIL"
+    # stressapptest.log should exist because mode=on always runs
+    [[ -f "${TEST_LOG_DIR}/stressapptest.log" ]]
+}
+
+@test "stressapptest off mode skips entirely" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "should not run"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest off \
+        --stressapptest-dir "$sat_dir"
+    assert_success
+    assert_output --partial "PASS"
+    [[ ! -f "${TEST_LOG_DIR}/stressapptest.log" ]]
+}
+
+@test "stressapptest failure causes FAIL verdict" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: FAIL" >&2
+exit 1
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    assert_failure
+    assert_output --partial "FAIL"
+    assert_output --partial "stressapptest"
+}
+
+@test "stressapptest and memtester both fail reports both in fail_sources" {
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+exit 1
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+exit 1
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir" \
+        --color off
+    assert_failure
+    assert_output --partial "memtester"
+    assert_output --partial "stressapptest"
+}
+
+@test "stressapptest custom seconds used" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<MOCK
+#!/usr/bin/env bash
+echo "args: \$*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_secs"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --stressapptest on \
+        --stressapptest-seconds 42 \
+        --stressapptest-dir "$sat_dir"
+    grep -q -- "-s 42" "${log_dir}/stressapptest.log"
+}
+
+@test "stressapptest default seconds uses elapsed time (clamped to min 1)" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<MOCK
+#!/usr/bin/env bash
+echo "args: \$*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_elapsed"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --stressapptest on \
+        --stressapptest-seconds 0 \
+        --stressapptest-dir "$sat_dir"
+    # Elapsed time for mock is ~0, clamped to 1
+    grep -q -- "-s 1" "${log_dir}/stressapptest.log"
+}
+
+@test "stressapptest log file created" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_satlog"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    [[ -f "${log_dir}/stressapptest.log" ]]
+}
+
+@test "stressapptest master log records results" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_satmaster"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    grep -q "stressapptest" "${log_dir}/master.log"
+    grep -q "PASSED" "${log_dir}/master.log"
+}
+
+@test "stressapptest EDAC spans both passes" {
+    local edac_fixture="${TEST_LOG_DIR}/edac_sat"
+    mkdir -p "${edac_fixture}/mc/mc0/csrow0"
+    echo "0" > "${edac_fixture}/mc/mc0/csrow0/ce_count"
+    echo "0" > "${edac_fixture}/mc/mc0/csrow0/ue_count"
+    export EDAC_BASE="$edac_fixture"
+
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    # stressapptest increments UE counter
+    cat > "${sat_dir}/stressapptest" <<MOCK
+#!/usr/bin/env bash
+echo "1" > "${edac_fixture}/mc/mc0/csrow0/ue_count"
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    # EDAC UE detected during stressapptest → FAIL
+    assert_failure
+    assert_output --partial "EDAC"
+}
+
+@test "stressapptest pass log says cores not threads" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_satcores"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    grep -q "stressapptest" "${log_dir}/master.log"
 }
 
 @test "full run CE with --allow-ce --color on shows yellow WARNING" {
@@ -407,7 +737,8 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        --allow-ce --color on
+        --allow-ce --color on \
+        $TEST_STRESSAPPTEST_OFF
     assert_success
     assert_output --partial "PASS"
     assert_output --partial $'\033[33m'

@@ -15,6 +15,14 @@ LOG_DIR=""
 ITERATIONS=1
 ALLOW_CE=0
 COLOR_MODE="auto"
+# DEFAULT_STRESSAPPTEST_DIR is patched by 'make install STRESSAPPTEST_DIR=/path'
+DEFAULT_STRESSAPPTEST_DIR="${DEFAULT_STRESSAPPTEST_DIR:-/usr/local/bin}"
+# shellcheck disable=SC2034
+STRESSAPPTEST_DIR="$DEFAULT_STRESSAPPTEST_DIR"
+# shellcheck disable=SC2034
+STRESSAPPTEST_MODE="auto"
+# shellcheck disable=SC2034
+STRESSAPPTEST_SECONDS=0
 
 # usage: print help text
 usage() {
@@ -29,6 +37,9 @@ Options:
   --iterations N      Number of memtester iterations (default: 1)
   --allow-ce          Allow correctable EDAC errors (CE); only fail on uncorrectable (UE)
   --color MODE        Coloured output: auto (default), on, off
+  --stressapptest MODE  stressapptest pass: auto (default), on, off
+  --stressapptest-seconds N  stressapptest duration (0 = use memtester time, default: 0)
+  --stressapptest-dir DIR  Directory containing stressapptest binary (default: ${DEFAULT_STRESSAPPTEST_DIR})
   --version           Show version
   --help              Show this help message
 EOF
@@ -46,6 +57,9 @@ parse_args() {
             --iterations) ITERATIONS="$2"; shift 2 ;;
             --allow-ce)   ALLOW_CE=1; shift ;;
             --color)      COLOR_MODE="$2"; shift 2 ;;
+            --stressapptest) STRESSAPPTEST_MODE="$2"; shift 2 ;;
+            --stressapptest-seconds) STRESSAPPTEST_SECONDS="$2"; shift 2 ;;
+            --stressapptest-dir) STRESSAPPTEST_DIR="$2"; shift 2 ;;
             --version)    echo "pmemtester ${pmemtester_version:-unknown}"; exit 0 ;;
             --help)       usage; exit 0 ;;
             *)
@@ -80,5 +94,16 @@ validate_args() {
             return 1
             ;;
     esac
+    case "$STRESSAPPTEST_MODE" in
+        auto|on|off) : ;;
+        *)
+            echo "ERROR: --stressapptest must be auto, on, or off (got ${STRESSAPPTEST_MODE})" >&2
+            return 1
+            ;;
+    esac
+    if [[ "$STRESSAPPTEST_SECONDS" -lt 0 ]]; then
+        echo "ERROR: --stressapptest-seconds must be >= 0 (got ${STRESSAPPTEST_SECONDS})" >&2
+        return 1
+    fi
     return 0
 }

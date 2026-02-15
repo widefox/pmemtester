@@ -49,3 +49,45 @@ teardown() {
     assert_success
     assert_output --partial "default: /usr/local/bin"
 }
+
+# STRESSAPPTEST_DIR install-time patching
+
+@test "make install default STRESSAPPTEST_DIR is /usr/local/bin" {
+    make -C "$PROJECT_ROOT" install DESTDIR="$INSTALL_DIR" PREFIX=/usr/local 2>/dev/null
+    local cli_sh="${INSTALL_DIR}/usr/local/lib/pmemtester/cli.sh"
+    [[ -f "$cli_sh" ]]
+    grep -q '/usr/local/bin' "$cli_sh"
+}
+
+@test "make install custom STRESSAPPTEST_DIR patches default" {
+    make -C "$PROJECT_ROOT" install DESTDIR="$INSTALL_DIR" PREFIX=/usr/local STRESSAPPTEST_DIR=/usr/bin 2>/dev/null
+    local cli_sh="${INSTALL_DIR}/usr/local/lib/pmemtester/cli.sh"
+    [[ -f "$cli_sh" ]]
+    grep -q 'DEFAULT_STRESSAPPTEST_DIR="/usr/bin"' "$cli_sh"
+}
+
+@test "make install custom STRESSAPPTEST_DIR updates help text" {
+    make -C "$PROJECT_ROOT" install DESTDIR="$INSTALL_DIR" PREFIX=/usr/local STRESSAPPTEST_DIR=/usr/bin 2>/dev/null
+    local installed="${INSTALL_DIR}/usr/local/bin/pmemtester"
+    [[ -x "$installed" ]]
+
+    run bash -c "
+        source '${INSTALL_DIR}/usr/local/lib/pmemtester/cli.sh'
+        usage
+    "
+    assert_success
+    assert_output --partial "default: /usr/bin"
+}
+
+@test "make install without STRESSAPPTEST_DIR keeps original default" {
+    make -C "$PROJECT_ROOT" install DESTDIR="$INSTALL_DIR" PREFIX=/usr/local 2>/dev/null
+    local installed="${INSTALL_DIR}/usr/local/bin/pmemtester"
+    [[ -x "$installed" ]]
+
+    run bash -c "
+        source '${INSTALL_DIR}/usr/local/lib/pmemtester/cli.sh'
+        usage
+    "
+    assert_success
+    assert_output --partial "--stressapptest-dir"
+}

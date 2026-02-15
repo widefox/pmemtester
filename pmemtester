@@ -25,6 +25,25 @@ main() {
     memtester_path="$(find_memtester "$MEMTESTER_DIR")"
     validate_memtester "$memtester_path"
 
+    # Resolve stressapptest binary based on mode
+    local stressapptest_path=""
+    local run_stressapptest_pass=0
+    case "$STRESSAPPTEST_MODE" in
+        on)
+            stressapptest_path="$(find_stressapptest "$STRESSAPPTEST_DIR")"
+            validate_stressapptest "$stressapptest_path"
+            run_stressapptest_pass=1
+            ;;
+        auto)
+            if stressapptest_path="$(find_stressapptest "$STRESSAPPTEST_DIR" 2>/dev/null)"; then
+                run_stressapptest_pass=1
+            fi
+            ;;
+        off)
+            run_stressapptest_pass=0
+            ;;
+    esac
+
     local ram_kb core_count ram_per_core_mb
     ram_kb="$(calculate_test_ram_kb "$PERCENT" "$RAM_TYPE")"
     core_count="$(get_core_count)"
@@ -50,11 +69,34 @@ main() {
     fi
 
     # Run memtesters
+    local memtester_start_seconds=$SECONDS
     run_all_memtesters "$memtester_path" "$size_arg" "$ITERATIONS" "$core_count" "$log_dir"
     local memtester_result=0
     wait_and_collect "$log_dir" || memtester_result=1
+    local memtester_elapsed=$(( SECONDS - memtester_start_seconds ))
 
-    # EDAC after
+    # Conditional stressapptest execution
+    local stressapptest_result=0
+    if [[ "$run_stressapptest_pass" -eq 1 ]]; then
+        # auto mode: skip if memtester failed
+        if [[ "$STRESSAPPTEST_MODE" == "auto" ]] && [[ "$memtester_result" -ne 0 ]]; then
+            log_master "Skipping stressapptest: memtester failed" "$log_dir"
+        else
+            # Determine duration
+            local sat_seconds="$STRESSAPPTEST_SECONDS"
+            if [[ "$sat_seconds" -eq 0 ]]; then
+                sat_seconds="$memtester_elapsed"
+                if [[ "$sat_seconds" -lt 1 ]]; then
+                    sat_seconds=1
+                fi
+            fi
+            # Total MB across all cores
+            local total_mb=$(( ram_per_core_mb * core_count ))
+            run_stressapptest "$stressapptest_path" "$sat_seconds" "$total_mb" "$core_count" "$log_dir" || stressapptest_result=1
+        fi
+    fi
+
+    # EDAC after (spans both passes)
     local edac_msg_result=0
     local edac_class="none"
     if [[ "$edac_supported" -eq 1 ]]; then
@@ -76,6 +118,9 @@ main() {
     if [[ "$memtester_result" -ne 0 ]]; then
         fail_sources="memtester"
     fi
+    if [[ "$stressapptest_result" -ne 0 ]]; then
+        fail_sources="${fail_sources:+${fail_sources}, }stressapptest"
+    fi
     if [[ "$edac_class" == "ue_only" ]] || [[ "$edac_class" == "ce_and_ue" ]]; then
         fail_sources="${fail_sources:+${fail_sources}, }EDAC: ${edac_class}"
     fi
@@ -83,9 +128,9 @@ main() {
         fail_sources="${fail_sources:+${fail_sources}, }EDAC: new messages"
     fi
 
-    # Priority 1: memtester failure, UE, or new dmesg messages → FAIL
+    # Priority 1: any failure → FAIL
     if [[ -n "$fail_sources" ]]; then
-        log_master "FAIL: memtester_result=${memtester_result} edac_class=${edac_class} edac_msg_result=${edac_msg_result}" "$log_dir"
+        log_master "FAIL: memtester_result=${memtester_result} stressapptest_result=${stressapptest_result} edac_class=${edac_class} edac_msg_result=${edac_msg_result}" "$log_dir"
         color_fail "$fail_sources"
         return 1
     fi
@@ -103,7 +148,7 @@ main() {
         return 1
     fi
     # Priority 4: clean → PASS
-    log_master "PASS: All memtesters passed, no EDAC errors" "$log_dir"
+    log_master "PASS: All tests passed, no EDAC errors" "$log_dir"
     color_pass
     return 0
 }
