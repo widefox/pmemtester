@@ -4,20 +4,22 @@
 
 pmemtester runs in two phases:
 
-1. **Phase 1 — memtester (deterministic patterns):** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On a 16-core system testing 64 GB, this phase completes in ~20 minutes (1 loop) versus ~5 hours for a single memtester instance.
+1. **Phase 1 — memtester (deterministic patterns):** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels), pmemtester runs 48 instances of 4800 MB each, completing Phase 1 in ~2 hours (1 loop). A single memtester instance testing the same 225 GB would take roughly 48x longer.
 
 2. **Phase 2 — stressapptest (randomised stress):** Runs stressapptest with the same total memory and thread count as Phase 1. By default (`--stressapptest-seconds 0`), the duration matches Phase 1's wall-clock time, so this phase takes approximately the same time. Use `--stressapptest off` to skip this phase entirely, or `--stressapptest-seconds N` to set an explicit duration.
 
-The Phase 1 memtester run determines the stressapptest duration: if memtester takes 20 minutes, stressapptest also runs for 20 minutes (unless overridden). Total run time approximately doubles compared to memtester alone.
+The Phase 1 memtester run determines the stressapptest duration: if memtester takes 2 hours, stressapptest also runs for 2 hours (unless overridden). Total run time approximately doubles compared to memtester alone.
 
 | Tool | Configuration | Phase 1 (memtester) | Phase 2 (stressapptest) | Total |
 |------|--------------|---------------------|------------------------|-------|
-| memtester | 1 instance, 64 GB | ~5 hours (1 loop) | — | ~5 hours |
-| pmemtester (`--stressapptest off`) | 16 instances, 4 GB each | ~20 min (1 loop) | skipped | ~20 min |
-| pmemtester (default) | 16 instances + stressapptest | ~20 min (1 loop) | ~20 min | ~40 min |
-| pmemtester (`--stressapptest-seconds 3600`) | 16 instances + stressapptest | ~20 min (1 loop) | 60 min | ~80 min |
+| memtester | 1 instance, 225 GB | days (1 loop) | — | days |
+| pmemtester (`--stressapptest off`) | 48 instances, 4800 MB each | ~2 hours (1 loop) | skipped | ~2 hours |
+| pmemtester (default) | 48 instances + stressapptest | ~2 hours (1 loop) | ~2 hours | ~4 hours |
+| pmemtester (`--stressapptest-seconds 3600`) | 48 instances + stressapptest | ~2 hours (1 loop) | 60 min | ~3 hours |
 
-Aggregate memory bandwidth saturates at 3-5 cores on a typical dual-channel system. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads (see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread)). No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing.
+Example system: AMD EPYC (1 socket, 48 cores / 96 threads, 256 GB DDR5, 8 channels). pmemtester uses physical cores only (not SMT threads) — see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread).
+
+Aggregate memory bandwidth saturates at ~10+ cores on an 8-channel server platform. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads. No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing.
 
 References: [memtester 64 GB timing estimate (GitHub issue #2)](https://github.com/jnavila/memtester/issues/2).
 
