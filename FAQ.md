@@ -1,14 +1,23 @@
 # FAQ
 
-## How fast is pmemtester compared to stressapptest?
+## Speed and timing
 
-pmemtester parallelises memtester across all CPU cores, reducing wall-clock time proportionally up to memory bandwidth saturation. On a system with 16 physical cores testing 64 GB, pmemtester completes in ~20 minutes (1 loop) versus ~5 hours for a single memtester instance. stressapptest runs for a user-specified duration (typically 60s-2hrs) and reports aggregate throughput in its output (hardware-dependent; run `stressapptest -s 60` to measure yours). No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing. Aggregate memory bandwidth saturates at 3-5 cores on a typical dual-channel system. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads (see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread)).
+pmemtester runs in two phases:
 
-| Tool | Configuration | ~Time for 64 GB |
-|------|--------------|-----------------|
-| memtester | 1 instance, 64 GB | ~5 hours (1 loop) |
-| pmemtester | 16 instances, 4 GB each | ~20 minutes (1 loop) |
-| stressapptest | Default (auto-threads) | User-specified duration (typically 60s-2hrs) |
+1. **Phase 1 — memtester (deterministic patterns):** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On a 16-core system testing 64 GB, this phase completes in ~20 minutes (1 loop) versus ~5 hours for a single memtester instance.
+
+2. **Phase 2 — stressapptest (randomised stress):** Runs stressapptest with the same total memory and thread count as Phase 1. By default (`--stressapptest-seconds 0`), the duration matches Phase 1's wall-clock time, so this phase takes approximately the same time. Use `--stressapptest off` to skip this phase entirely, or `--stressapptest-seconds N` to set an explicit duration.
+
+The Phase 1 memtester run determines the stressapptest duration: if memtester takes 20 minutes, stressapptest also runs for 20 minutes (unless overridden). Total run time approximately doubles compared to memtester alone.
+
+| Tool | Configuration | Phase 1 (memtester) | Phase 2 (stressapptest) | Total |
+|------|--------------|---------------------|------------------------|-------|
+| memtester | 1 instance, 64 GB | ~5 hours (1 loop) | — | ~5 hours |
+| pmemtester (`--stressapptest off`) | 16 instances, 4 GB each | ~20 min (1 loop) | skipped | ~20 min |
+| pmemtester (default) | 16 instances + stressapptest | ~20 min (1 loop) | ~20 min | ~40 min |
+| pmemtester (`--stressapptest-seconds 3600`) | 16 instances + stressapptest | ~20 min (1 loop) | 60 min | ~80 min |
+
+Aggregate memory bandwidth saturates at 3-5 cores on a typical dual-channel system. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads (see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread)). No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing.
 
 References: [memtester 64 GB timing estimate (GitHub issue #2)](https://github.com/jnavila/memtester/issues/2).
 
@@ -82,9 +91,9 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 | Scenario | memtester | stressapptest | stress-ng | pmemtester |
 |----------|-----------|---------------|-----------|------------|
 | **Dead capacitor (hard fault)** | Excellent — identifies the exact address | Good — may miss if random patterns don't hit the cell | Good — depends on stressor used | Excellent — memtester patterns + EDAC confirms hardware error |
-| **Overheating RAM** | Poor — generates very little heat or bus load | Excellent — saturates bandwidth, stresses thermal envelope | Very good — significant heat under multi-worker load | Good — parallel memtester generates moderate heat, less than stressapptest |
-| **Bad memory controller** | Poor — sequential single-threaded load is too light | Excellent — this is its primary design goal | Good — high concurrent load stresses controller | Good — parallel load stresses controller, not as randomised as stressapptest |
-| **Power supply / VRM instability** | Poor — low current draw | Excellent — large current transients reveal weak PSUs | Good — high sustained load | Good — parallel load draws more current than single memtester |
+| **Overheating RAM** | Poor — generates very little heat or bus load | Excellent — saturates bandwidth, stresses thermal envelope | Very good — significant heat under multi-worker load | Very good — parallel memtester + stressapptest second pass |
+| **Bad memory controller** | Poor — sequential single-threaded load is too light | Excellent — this is its primary design goal | Good — high concurrent load stresses controller | Very good — parallel load + stressapptest randomised stress |
+| **Power supply / VRM instability** | Poor — low current draw | Excellent — large current transients reveal weak PSUs | Good — high sustained load | Good — parallel load + stressapptest draws significant current |
 | **Rowhammer vulnerability** | No | No | Yes — has specific rowhammer stressors | No (memtester does not target rowhammer) |
 
 ### Feature comparison
@@ -93,7 +102,7 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 |---------|-----------|---------------|-----------|------------|
 | Concurrency | Single-threaded | Multi-threaded (1 per core) | Massively parallel (N workers) | 1 memtester per core |
 | Memory locking | `mlock` (may fail silently) | `mlock` on large allocations | `mlock`, `mmap`, `memfd`, etc. | `mlock` with pre-validation (`check_memlock_sufficient`) |
-| DMA / bus stress | None — pure CPU-to-RAM | High — disk/network threads stress the bus | Variable — can stress I/O and RAM simultaneously | None — pure CPU-to-RAM (parallel) |
+| DMA / bus stress | None — pure CPU-to-RAM | High — disk/network threads stress the bus | Variable — can stress I/O and RAM simultaneously | Optional — stressapptest second pass adds bus stress |
 | ECC/EDAC detection | No | No | No | Yes — before/after EDAC counter comparison |
 | Pattern depth per location | ~2,590 sweeps/loop | Statistical (CRC-verified) | Configurable | ~2,590 sweeps/loop |
 | Bus saturation | ~15-25% of peak ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/)) | ~75-85% of peak | Variable | ~75-90% of peak ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/)) |
@@ -102,7 +111,7 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 
 ### Where pmemtester fits
 
-pmemtester wraps memtester's thorough 15-pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC hardware error monitoring (detecting errors invisible to all three tools). It is a "microscope with bus saturation" — deterministic patterns at near-peak memory bandwidth, plus hardware error detection.
+pmemtester wraps memtester's thorough 15-pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC hardware error monitoring (detecting errors invisible to all three tools). pmemtester also runs an optional stressapptest second pass after memtester completes (enabled by default in `auto` mode when the binary is present), combining both testing approaches in a single tool. It is a "microscope with bus saturation" — deterministic patterns at near-peak memory bandwidth, randomised stress testing, plus hardware error detection.
 
 References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [stressapptest source](https://github.com/stressapptest/stressapptest), [Google: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [stress-ng vm stressors](https://wiki.ubuntu.com/Kernel/Reference/stress-ng), [stress-ng source: stress-vm.c](https://github.com/ColinIanKing/stress-ng/blob/master/stress-vm.c), [Kim et al., "Flipping Bits in Memory Without Accessing Them" (ISCA 2014, rowhammer)](https://users.ece.cmu.edu/~yoMDL/papers/kim-isca14.pdf).
 
@@ -112,10 +121,10 @@ References: [memtester source: tests.c](https://github.com/jnavila/memtester/blo
 Boot into [Memtest86+](https://www.memtest.org/) from USB. Bare-metal testing has direct physical memory access and is the gold standard for hardware validation. No userspace tool can fully substitute because the OS reserves memory that userspace cannot test. If you must stay in the OS, use memtester (or pmemtester for parallelism + EDAC) — it is the most methodical at verifying individual cells.
 
 **Validating overclocking, new RAM timings, or cooling:**
-Use stressapptest. Run for 1 hour at full memory. If it passes, your voltage, timings, and cooling are stable. memtester is not useful here — you can pass 24 hours of memtester and crash in 5 minutes of a game because memtester does not generate enough bus contention or heat to expose marginal timings.
+Use pmemtester. It runs memtester's 15-pattern cell testing followed by a stressapptest pass for bus-contention and thermal stress, with EDAC monitoring throughout. A single `./pmemtester --stressapptest-seconds 3600` covers both pattern validation and stability testing. Standalone stressapptest is no longer the recommended approach since pmemtester includes it as Phase 2, adds EDAC error detection (invisible to stressapptest alone), and tests each cell deterministically first.
 
 **Server burn-in or production deployment validation:**
-Use pmemtester. It combines memtester's thorough cell-level testing with parallel bandwidth saturation and EDAC monitoring. The `--allow-ce` flag lets you distinguish between correctable errors (monitor and track) and uncorrectable errors (fail immediately). For maximum coverage, follow with a stressapptest run to exercise bus contention patterns that memtester's sequential approach does not cover.
+Use pmemtester. It combines memtester's thorough cell-level testing with parallel bandwidth saturation, an optional stressapptest second pass for bus-contention stress testing, and EDAC monitoring. The `--allow-ce` flag lets you distinguish between correctable errors (monitor and track) and uncorrectable errors (fail immediately). By default (`--stressapptest auto`), pmemtester runs stressapptest automatically after memtester if the binary is found, using the same duration and total memory as the memtester pass.
 
 **Kernel development, OOM testing, swap stability:**
 Use stress-ng. It stresses the entire virtual memory stack — OOM killer behaviour, swap partition stability, page table management, cache coherency. Its rowhammer stressors are also the only userspace way to test DRAM disturbance error susceptibility.

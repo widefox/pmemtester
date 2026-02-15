@@ -719,6 +719,189 @@ MOCK
     grep -q "stressapptest" "${log_dir}/master.log"
 }
 
+# Timing and intermediate EDAC output tests (Cycles 8-19)
+
+@test "full run prints start message with timing" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "pmemtester started"
+    # Should mention MB and cores
+    assert_output --partial "MB"
+    assert_output --partial "core"
+}
+
+@test "full run prints Phase 1 start" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "Phase 1"
+    assert_output --partial "started"
+}
+
+@test "full run prints Phase 1 finished with result and duration" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "Phase 1"
+    assert_output --partial "finished"
+    assert_output --partial "passed"
+    # Duration pattern: Ns or Nm Ns
+    [[ "$output" =~ [0-9]+s ]]
+}
+
+@test "full run prints Phase 1 failure count" {
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+echo "FAIL" >&2
+exit 1
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+    assert_failure
+    assert_output --partial "FAILED"
+    # Should show "N of M instances FAILED" in Phase 1 finish line
+    assert_output --partial "instances FAILED"
+}
+
+@test "full run prints intermediate EDAC result" {
+    export EDAC_BASE="${FIXTURE_DIR}/edac_counters_zero"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "EDAC after Phase 1"
+    assert_output --partial "no errors"
+}
+
+@test "full run intermediate EDAC shows CE detected" {
+    local edac_fixture="${TEST_LOG_DIR}/edac_mid_ce"
+    mkdir -p "${edac_fixture}/mc/mc0/csrow0"
+    echo "0" > "${edac_fixture}/mc/mc0/csrow0/ce_count"
+    echo "0" > "${edac_fixture}/mc/mc0/csrow0/ue_count"
+    export EDAC_BASE="$edac_fixture"
+
+    # Memtester that increments CE counter during run
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<MOCK
+#!/usr/bin/env bash
+echo "3" > "${edac_fixture}/mc/mc0/csrow0/ce_count"
+echo "memtester pass"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+    assert_output --partial "correctable errors"
+}
+
+@test "full run prints Phase 2 start with ETA" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    assert_success
+    assert_output --partial "Phase 2"
+    assert_output --partial "started"
+    assert_output --partial "ETA"
+}
+
+@test "full run prints Phase 2 finished with duration" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    assert_success
+    assert_output --partial "Phase 2"
+    assert_output --partial "finished"
+    [[ "$output" =~ [0-9]+s ]]
+}
+
+@test "full run prints total duration" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "Total duration"
+}
+
+@test "full run no Phase 2 still prints total duration" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest off
+    assert_success
+    assert_output --partial "Total duration"
+    refute_output --partial "Phase 2"
+}
+
+@test "full run Phase 2 with explicit seconds shows ETA" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<MOCK
+#!/usr/bin/env bash
+echo "args: \$*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-seconds 42 \
+        --stressapptest-dir "$sat_dir"
+    assert_success
+    assert_output --partial "ETA"
+}
+
+@test "full run intermediate EDAC creates mid snapshot files" {
+    export EDAC_BASE="${FIXTURE_DIR}/edac_counters_zero"
+
+    local log_dir="${TEST_LOG_DIR}/logs_mid"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        $TEST_STRESSAPPTEST_OFF
+    [[ -f "${log_dir}/edac_counters_mid.txt" ]]
+    [[ -f "${log_dir}/edac_messages_mid.txt" ]]
+}
+
 @test "full run CE with --allow-ce --color on shows yellow WARNING" {
     local edac_fixture="${TEST_LOG_DIR}/edac_ce_warn"
     mkdir -p "${edac_fixture}/mc/mc0/csrow0"

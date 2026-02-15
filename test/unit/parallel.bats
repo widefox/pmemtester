@@ -68,3 +68,20 @@ teardown() {
     run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 4 "$TEST_LOG_DIR"
     ! wait_and_collect "$TEST_LOG_DIR"
 }
+
+@test "wait_and_collect all pass sets MEMTESTER_FAIL_COUNT to 0" {
+    create_mock memtester 'echo "pass"; exit 0'
+    run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 3 "$TEST_LOG_DIR"
+    wait_and_collect "$TEST_LOG_DIR"
+    [[ "$MEMTESTER_FAIL_COUNT" -eq 0 ]]
+}
+
+@test "wait_and_collect one fail sets MEMTESTER_FAIL_COUNT to 1" {
+    local counter_file="${TEST_LOG_DIR}/.fail_count_test"
+    echo "0" > "$counter_file"
+    create_mock memtester 'count=$(cat '"${counter_file}"'); count=$((count+1)); echo "$count" > '"${counter_file}"'; if [ "$count" -eq 2 ]; then exit 1; else echo "pass"; exit 0; fi'
+
+    run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 3 "$TEST_LOG_DIR"
+    ! wait_and_collect "$TEST_LOG_DIR"
+    [[ "$MEMTESTER_FAIL_COUNT" -eq 1 ]]
+}

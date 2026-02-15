@@ -43,10 +43,12 @@ wait_and_collect() {
     local log_dir="$1"
     local failed=0
     local i=0
+    MEMTESTER_FAIL_COUNT=0
 
     for pid in "${MEMTESTER_PIDS[@]}"; do
         if ! wait "$pid"; then
             log_master "Thread ${i} FAILED" "$log_dir"
+            MEMTESTER_FAIL_COUNT=$(( MEMTESTER_FAIL_COUNT + 1 ))
             failed=1
         fi
         i=$(( i + 1 ))

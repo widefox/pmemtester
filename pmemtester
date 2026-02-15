@@ -58,7 +58,9 @@ main() {
     local log_dir="${LOG_DIR:-/tmp/pmemtester.$$}"
     init_logs "$log_dir" "$core_count"
 
-    log_master "Starting pmemtester: ${ram_per_core_mb}MB x ${core_count} cores" "$log_dir"
+    local total_mb=$(( ram_per_core_mb * core_count ))
+    local run_start_seconds=$SECONDS
+    print_status "pmemtester started: ${total_mb}MB across ${core_count} cores, ${ITERATIONS} iteration(s)" "$log_dir"
 
     # EDAC before
     local edac_supported=0
@@ -68,14 +70,25 @@ main() {
         capture_edac_counters > "${log_dir}/edac_counters_before.txt"
     fi
 
-    # Run memtesters
-    local memtester_start_seconds=$SECONDS
+    # Phase 1: memtester
+    print_status "Phase 1 (memtester) started: ${ram_per_core_mb}MB x ${core_count} instances" "$log_dir"
+    local phase1_start=$SECONDS
     run_all_memtesters "$memtester_path" "$size_arg" "$ITERATIONS" "$core_count" "$log_dir"
     local memtester_result=0
     wait_and_collect "$log_dir" || memtester_result=1
-    local memtester_elapsed=$(( SECONDS - memtester_start_seconds ))
+    local phase1_elapsed=$(( SECONDS - phase1_start ))
+    print_status "Phase 1 (memtester) finished: $(format_phase_result "$core_count" "$MEMTESTER_FAIL_COUNT") ($(format_duration "$phase1_elapsed"))" "$log_dir"
 
-    # Conditional stressapptest execution
+    # Intermediate EDAC check (informational)
+    local edac_mid_class="none"
+    if [[ "$edac_supported" -eq 1 ]]; then
+        capture_edac_messages > "${log_dir}/edac_messages_mid.txt"
+        capture_edac_counters > "${log_dir}/edac_counters_mid.txt"
+        edac_mid_class="$(classify_edac_counters "${log_dir}/edac_counters_before.txt" "${log_dir}/edac_counters_mid.txt" 2>/dev/null)" || true
+        print_status "EDAC after Phase 1: $(format_edac_summary "$edac_mid_class")" "$log_dir"
+    fi
+
+    # Phase 2: conditional stressapptest
     local stressapptest_result=0
     if [[ "$run_stressapptest_pass" -eq 1 ]]; then
         # auto mode: skip if memtester failed
@@ -85,18 +98,25 @@ main() {
             # Determine duration
             local sat_seconds="$STRESSAPPTEST_SECONDS"
             if [[ "$sat_seconds" -eq 0 ]]; then
-                sat_seconds="$memtester_elapsed"
+                sat_seconds="$phase1_elapsed"
                 if [[ "$sat_seconds" -lt 1 ]]; then
                     sat_seconds=1
                 fi
             fi
-            # Total MB across all cores
-            local total_mb=$(( ram_per_core_mb * core_count ))
+            print_status "Phase 2 (stressapptest) started: ${total_mb}MB, ${sat_seconds}s, ${core_count} threads" "$log_dir"
+            print_status "Phase 2 ETA: $(format_eta "$sat_seconds") ($(format_duration "$sat_seconds"))" "$log_dir"
+            local phase2_start=$SECONDS
             run_stressapptest "$stressapptest_path" "$sat_seconds" "$total_mb" "$core_count" "$log_dir" || stressapptest_result=1
+            local phase2_elapsed=$(( SECONDS - phase2_start ))
+            if [[ "$stressapptest_result" -eq 0 ]]; then
+                print_status "Phase 2 (stressapptest) finished: PASSED ($(format_duration "$phase2_elapsed"))" "$log_dir"
+            else
+                print_status "Phase 2 (stressapptest) finished: FAILED ($(format_duration "$phase2_elapsed"))" "$log_dir"
+            fi
         fi
     fi
 
-    # EDAC after (spans both passes)
+    # EDAC after (spans both phases for final verdict)
     local edac_msg_result=0
     local edac_class="none"
     if [[ "$edac_supported" -eq 1 ]]; then
@@ -111,6 +131,9 @@ main() {
     fi
 
     aggregate_logs "$log_dir" "$core_count"
+
+    local total_elapsed=$(( SECONDS - run_start_seconds ))
+    print_status "Total duration: $(format_duration "$total_elapsed")" "$log_dir"
 
     # Final verdict
     # Build failure source for diagnostic output
