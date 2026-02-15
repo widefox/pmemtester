@@ -9,13 +9,14 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/), and
 ## Features
 
 - Runs one memtester instance per CPU core to saturate the memory bus on any system
+- Optional stressapptest second pass for randomised bus-contention stress testing
 - Configurable RAM percentage (default 90% of available)
 - RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
-- Linux EDAC hardware error detection (before/after comparison)
+- Linux EDAC hardware error detection (before/after comparison spanning both passes)
 - Optionally allow correctable EDAC errors (`--allow-ce`); only fail on uncorrectable (UE)
 - Per-core logging with aggregated master log
-- Pass/fail verdict combining memtester results and EDAC checks
+- Pass/fail verdict combining memtester, stressapptest, and EDAC results
 
 ## Quick Start
 
@@ -40,18 +41,21 @@ $ pmemtester --help
 Usage: pmemtester [OPTIONS]
 
 Options:
-  --percent N         Percentage of RAM to test (1-100, default: 90)
-  --ram-type TYPE     RAM measurement: available (default), total, free
-  --memtester-dir DIR Directory containing memtester binary (default: /usr/local/bin)
-  --log-dir DIR       Directory for log files (default: /tmp/pmemtester.PID)
-  --iterations N      Number of memtester iterations (default: 1)
-  --allow-ce          Allow correctable EDAC errors (CE); only fail on uncorrectable (UE)
-  --color MODE        Coloured output: auto (default), on, off
-  --version           Show version
-  --help              Show this help message
+  --percent N              Percentage of RAM to test (1-100, default: 90)
+  --ram-type TYPE          RAM measurement: available (default), total, free
+  --memtester-dir DIR      Directory containing memtester binary (default: /usr/local/bin)
+  --log-dir DIR            Directory for log files (default: /tmp/pmemtester.PID)
+  --iterations N           Number of memtester iterations (default: 1)
+  --allow-ce               Allow correctable EDAC errors (CE); only fail on uncorrectable (UE)
+  --color MODE             Coloured output: auto (default), on, off
+  --stressapptest MODE     stressapptest pass: auto (default), on, off
+  --stressapptest-seconds N  stressapptest duration (0 = use memtester time, default: 0)
+  --stressapptest-dir DIR  Directory containing stressapptest binary (default: /usr/local/bin)
+  --version                Show version
+  --help                   Show this help message
 ```
 
-The `--memtester-dir` default may differ on distro-packaged installations (see [Installation](#installation)).
+The `--memtester-dir` and `--stressapptest-dir` defaults may differ on distro-packaged installations (see [Installation](#installation)).
 
 ## Why EDAC Matters
 
@@ -134,7 +138,7 @@ test/
 │   └── logging.bats
 ├── integration/
 │   ├── full_run.bats           # End-to-end tests with mocked commands
-│   └── install.bats            # Install target tests (MEMTESTER_DIR patching)
+│   └── install.bats            # Install target tests (MEMTESTER_DIR/STRESSAPPTEST_DIR patching)
 ├── fixtures/                   # Synthetic /proc/meminfo, EDAC sysfs trees
 │   ├── proc_meminfo_normal
 │   ├── proc_meminfo_low
@@ -295,13 +299,15 @@ make dist              # Create .tgz distribution archive
 
 ### Distro packaging
 
-On distributions that package memtester to `/usr/bin`, pass `MEMTESTER_DIR` at install time to change the default:
+On distributions that package memtester or stressapptest to `/usr/bin`, pass the directory at install time to change the default:
 
 ```bash
 make install MEMTESTER_DIR=/usr/bin
+make install STRESSAPPTEST_DIR=/usr/bin
+make install MEMTESTER_DIR=/usr/bin STRESSAPPTEST_DIR=/usr/bin   # both
 ```
 
-This patches the default so `pmemtester --help` shows `(default: /usr/bin)` and memtester is found without needing `--memtester-dir`. The `--memtester-dir` flag still overrides at runtime.
+This patches the defaults so `pmemtester --help` shows the correct paths and binaries are found without needing `--memtester-dir` or `--stressapptest-dir`. The runtime flags still override at runtime.
 
 Distributions that package memtester (all install to `/usr/bin/memtester`):
 
@@ -315,6 +321,7 @@ Distributions that package memtester (all install to `/usr/bin/memtester`):
 ## Requirements
 
 - **memtester** binary (not bundled) -- [pyropus.ca](https://pyropus.ca./software/memtester/)
+- **stressapptest** binary (optional -- auto mode silently skips if absent) -- [github.com/stressapptest](https://github.com/stressapptest/stressapptest)
 - Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
 - `lscpu` (from util-linux; falls back to `nproc` from coreutils)
 - EDAC support (optional -- gracefully skipped if absent)

@@ -144,33 +144,6 @@ Considerations:
 - Cross-platform portability: memtester supports non-Linux systems; pmemtester is Linux-only (EDAC dependency)
 - Build system: autotools or meson, with the test suite ported from bats to a C test framework or kept as integration tests
 
-## 11. Optional stressapptest Second Pass
-
-Run stressapptest automatically after the memtester pass to combine deterministic pattern testing with randomised bus-contention stress testing in a single invocation.
-
-Rationale:
-- memtester finds stuck bits and coupling faults via deterministic patterns but generates little electrical noise
-- stressapptest finds timing margin failures and bus contention errors via randomised multi-threaded traffic (see README "Testing philosophy" section)
-- Running both back-to-back covers complementary failure modes without requiring the user to invoke two separate tools
-- EDAC monitoring spans both passes, catching hardware errors triggered by either workload
-
-Behaviour:
-- On by default: runs automatically if `stressapptest` is found in `/usr/local/bin` (or the directory specified by a future `--stressapptest-dir` flag)
-- Disabled explicitly with `--no-stressapptest`
-- Forced on with `--stressapptest` (fails with an error if the binary is not found, rather than silently skipping)
-- Explicit duration with `--stressapptest=SECONDS`; default duration is the wall-clock time the memtester pass took (timed internally)
-- stressapptest uses the same RAM amount and core count as the memtester pass
-- EDAC before/after comparison spans both passes (single before snapshot, single after snapshot)
-- stressapptest exit code is incorporated into the final PASS/FAIL verdict
-- Per-pass results are reported separately in the master log (memtester result, stressapptest result, EDAC result)
-
-Considerations:
-- stressapptest must be installed separately (not bundled); silently skipped if not found in the default case, but errors out if `--stressapptest` was explicitly requested
-- stressapptest allocates its own memory independently -- the total memory pressure is sequential, not additive, since memtester finishes first
-- stressapptest's `--mem_threads` and `-M` (memory size in MB) flags map naturally to pmemtester's core count and per-core RAM allocation
-- The `--seconds` flag controls stressapptest duration directly
-- Log stressapptest stdout/stderr to a dedicated log file in the log directory (e.g., `stressapptest.log`)
-
 ## 12. Stop on First Error
 
 Add a `--stop-on-error` flag that terminates the run immediately when any error is detected, rather than waiting for all memtester instances to complete.

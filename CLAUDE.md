@@ -42,6 +42,9 @@ make coverage
 
 # Run with options
 ./pmemtester --percent 80 --ram-type total --memtester-dir /usr/bin --iterations 3
+
+# Run with stressapptest forced on for 60 seconds
+./pmemtester --percent 80 --stressapptest on --stressapptest-seconds 60
 ```
 
 ## Architecture
@@ -51,21 +54,23 @@ make coverage
 ```tree
 pmemtester                  # Main executable (thin orchestrator)
 lib/
-├── math_utils.sh           # Integer arithmetic (ceiling_div, percentage_of, safe_multiply)
-├── unit_convert.sh         # kB/MB/bytes conversions
-├── system_detect.sh        # RAM and core count from /proc/meminfo and lscpu
-├── memtester_mgmt.sh       # Find and validate memtester binary
-├── memlock.sh              # Kernel memory lock limit checking and configuration
+├── cli.sh                  # Argument parsing and validation
+├── color.sh                # Coloured terminal output (PASS/FAIL/WARN)
 ├── edac.sh                 # EDAC message/counter capture and comparison
-├── ram_calc.sh             # RAM allocation math (percentage, per-core division)
-├── parallel.sh             # Background memtester launch, PID tracking, wait
 ├── logging.sh              # Per-thread and master log management
-└── cli.sh                  # Argument parsing and validation
+├── math_utils.sh           # Integer arithmetic (ceiling_div, percentage_of, safe_multiply)
+├── memlock.sh              # Kernel memory lock limit checking and configuration
+├── memtester_mgmt.sh       # Find and validate memtester binary
+├── parallel.sh             # Background memtester launch, PID tracking, wait
+├── ram_calc.sh             # RAM allocation math (percentage, per-core division)
+├── stressapptest_mgmt.sh   # Find, validate, and run stressapptest binary
+├── system_detect.sh        # RAM and core count from /proc/meminfo and lscpu
+└── unit_convert.sh         # kB/MB/bytes conversions
 ```
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `find_memtester` → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `check_memlock_sufficient` → `init_logs` → (EDAC before) → `run_all_memtesters` → `wait_and_collect` → (EDAC after) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `find_memtester` → (resolve stressapptest) → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `check_memlock_sufficient` → `init_logs` → (EDAC before) → `run_all_memtesters` → `wait_and_collect` → (conditional `run_stressapptest`) → (EDAC after) → `aggregate_logs` → PASS/FAIL
 
 ### Test Infrastructure
 
@@ -94,6 +99,7 @@ Default settings must never crash the host:
 ### External Dependencies
 
 - `memtester` binary (not bundled)
+- `stressapptest` binary (optional — auto mode silently skips if absent)
 - Linux kernel with EDAC support (optional — gracefully skipped if absent)
 - Standard Linux utilities: `lscpu`, `nproc` (fallback), `dmesg`, `awk`, `find`, `diff`
 - Test tools: `bats` (1.13.0+), `kcov` (38+), `shellcheck` (0.10.0+)
