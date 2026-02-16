@@ -902,6 +902,68 @@ MOCK
     [[ -f "${log_dir}/edac_messages_mid.txt" ]]
 }
 
+# Binary detection info messages
+
+@test "full run prints memtester found message" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "memtester found"
+    assert_output --partial "$TEST_MEMTESTER_DIR/memtester"
+}
+
+@test "full run prints stressapptest found message when present" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "Status: PASS"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir"
+    assert_success
+    assert_output --partial "stressapptest found"
+    assert_output --partial "$sat_dir/stressapptest"
+}
+
+@test "full run prints stressapptest not found in auto mode" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest auto \
+        --stressapptest-dir "${TEST_LOG_DIR}/no_sat"
+    assert_success
+    assert_output --partial "stressapptest not found"
+}
+
+@test "full run stressapptest off prints no detection message" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --stressapptest off
+    assert_success
+    refute_output --partial "stressapptest found"
+    refute_output --partial "stressapptest not found"
+}
+
+@test "full run detection messages appear in master.log" {
+    local log_dir="${TEST_LOG_DIR}/logs_detect"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        $TEST_STRESSAPPTEST_OFF
+    [[ -f "${log_dir}/master.log" ]]
+    grep -q "memtester found" "${log_dir}/master.log"
+}
+
 @test "full run CE with --allow-ce --color on shows yellow WARNING" {
     local edac_fixture="${TEST_LOG_DIR}/edac_ce_warn"
     mkdir -p "${edac_fixture}/mc/mc0/csrow0"

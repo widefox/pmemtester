@@ -58,6 +58,14 @@ main() {
     local log_dir="${LOG_DIR:-/tmp/pmemtester.$$}"
     init_logs "$log_dir" "$core_count"
 
+    # Report binary detection
+    print_status "memtester found: ${memtester_path}" "$log_dir"
+    if [[ "$run_stressapptest_pass" -eq 1 ]]; then
+        print_status "stressapptest found: ${stressapptest_path}" "$log_dir"
+    elif [[ "$STRESSAPPTEST_MODE" != "off" ]]; then
+        print_status "stressapptest not found (Phase 2 will be skipped)" "$log_dir"
+    fi
+
     local total_mb=$(( ram_per_core_mb * core_count ))
     local run_start_seconds=$SECONDS
     print_status "pmemtester started: ${total_mb}MB across ${core_count} cores, ${ITERATIONS} iteration(s)" "$log_dir"

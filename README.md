@@ -25,6 +25,9 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 # Install memtester first (not bundled)
 # e.g., apt install memtester  OR  build from source
 
+# Install stressapptest (optional, not bundled)
+# e.g., apt install stressapptest  OR  build from source
+
 # Install pmemtester
 sudo make install
 
@@ -117,7 +120,7 @@ The `--stressapptest` flag controls behaviour:
 
 | Mode | Behaviour |
 |------|-----------|
-| `auto` (default) | Silently skips if stressapptest binary is not found. Skips if memtester failed (no point stress-testing memory already known bad). Runs if binary is found and memtester passed. |
+| `auto` (default) | Reports whether stressapptest binary was found at startup. Skips Phase 2 if not found, or if memtester failed (no point stress-testing memory already known bad). Runs if binary is found and memtester passed. |
 | `on` | Forces stressapptest. Fails immediately if binary is not found. Runs even if memtester failed (useful for comprehensive diagnostics). |
 | `off` | Disables stressapptest entirely. |
 
@@ -146,26 +149,30 @@ stressapptest output is captured in `stressapptest.log` in the log directory. St
 ## Source Layout
 
 ```tree
-pmemtester                      # Main executable (thin orchestrator)
-Makefile                        # Build, test, install, dist targets
-PROMPT.md                       # Original design specification
-CLAUDE.md                       # Developer guide for Claude Code
+/usr/local/bin/                         # Default search path (override with --memtester-dir / --stressapptest-dir)
+├── memtester                           # External: required (not bundled)
+└── stressapptest                       # External: optional (not bundled)
+
+pmemtester                              # Main executable (thin orchestrator)
+Makefile                                # Build, test, install, dist targets
+PROMPT.md                               # Original design specification
+CLAUDE.md                               # Developer guide for Claude Code
 lib/
-├── cli.sh                      # Argument parsing and validation
-├── color.sh                    # Coloured terminal output (PASS/FAIL/WARN)
-├── edac.sh                     # EDAC message/counter monitoring
-├── logging.sh                  # Per-thread and master logging
-├── math_utils.sh               # Integer arithmetic utilities
-├── memlock.sh                  # Kernel memory lock management
-├── memtester_mgmt.sh           # Find and validate memtester binary
-├── parallel.sh                 # Parallel memtester execution
-├── ram_calc.sh                 # RAM allocation calculations
-├── stressapptest_mgmt.sh       # Find, validate, and run stressapptest
-├── system_detect.sh            # RAM and core count detection
-├── timing.sh                   # Timing, status output, phase formatting
-└── unit_convert.sh             # kB/MB/bytes conversions
+├── cli.sh                              # Argument parsing and validation
+├── color.sh                            # Coloured terminal output (PASS/FAIL/WARN)
+├── edac.sh                             # EDAC message/counter monitoring
+├── logging.sh                          # Per-thread and master logging
+├── math_utils.sh                       # Integer arithmetic utilities
+├── memlock.sh                          # Kernel memory lock management
+├── memtester_mgmt.sh                   # Find and validate memtester binary
+├── parallel.sh                         # Parallel memtester execution
+├── ram_calc.sh                         # RAM allocation calculations
+├── stressapptest_mgmt.sh               # Find, validate, and run stressapptest
+├── system_detect.sh                    # RAM and core count detection
+├── timing.sh                           # Timing, status output, phase formatting
+└── unit_convert.sh                     # kB/MB/bytes conversions
 test/
-├── unit/                       # Unit tests (one .bats per lib)
+├── unit/                                # Unit tests (one .bats per lib)
 │   ├── cli.bats
 │   ├── color.bats
 │   ├── edac.bats
@@ -180,9 +187,9 @@ test/
 │   ├── timing.bats
 │   └── unit_convert.bats
 ├── integration/
-│   ├── full_run.bats           # End-to-end tests with mocked commands
-│   └── install.bats            # Install target tests (MEMTESTER_DIR/STRESSAPPTEST_DIR patching)
-├── fixtures/                   # Synthetic /proc/meminfo, EDAC sysfs trees
+│   ├── full_run.bats                    # End-to-end tests with mocked commands
+│   └── install.bats                     # Install target tests (MEMTESTER_DIR/STRESSAPPTEST_DIR patching)
+├── fixtures/                            # Synthetic /proc/meminfo, EDAC sysfs trees
 │   ├── proc_meminfo_normal
 │   ├── proc_meminfo_low
 │   ├── proc_meminfo_no_available
@@ -194,10 +201,10 @@ test/
 │   ├── edac_messages_clean.txt
 │   └── edac_messages_errors.txt
 └── test_helper/
-    ├── common_setup.bash       # Shared test setup
-    ├── mock_helpers.bash       # Mock creation utilities
-    ├── bats-support/           # Git submodule
-    └── bats-assert/            # Git submodule
+    ├── common_setup.bash                # Shared test setup
+    ├── mock_helpers.bash                # Mock creation utilities
+    ├── bats-support/                    # Git submodule
+    └── bats-assert/                     # Git submodule
 ```
 
 ## Example Log Layout
@@ -223,6 +230,8 @@ pmemtester creates a log directory at `/tmp/pmemtester.<PID>/` (or `--log-dir`):
 ### master.log contents
 
 ```text
+[2026-02-15 09:00:00] [INFO] memtester found: /usr/local/bin/memtester
+[2026-02-15 09:00:00] [INFO] stressapptest found: /usr/local/bin/stressapptest
 [2026-02-15 09:00:00] [INFO] pmemtester started: 230400MB across 48 cores, 1 iteration(s)
 [2026-02-15 09:00:00] [INFO] Phase 1 (memtester) started: 4800MB x 48 instances
 --- Thread 0 ---
@@ -252,6 +261,8 @@ On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels):
 
 ```console
 $ sudo pmemtester --percent 90 --log-dir /tmp/memtest-run
+[2026-02-15 09:00:00] memtester found: /usr/local/bin/memtester
+[2026-02-15 09:00:00] stressapptest found: /usr/local/bin/stressapptest
 [2026-02-15 09:00:00] pmemtester started: 230400MB across 48 cores, 1 iteration(s)
 [2026-02-15 09:00:00] Phase 1 (memtester) started: 4800MB x 48 instances
 [2026-02-15 11:00:02] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
@@ -271,6 +282,8 @@ When memtester detects a memory error (thread 31 fails after 45 minutes while ot
 
 ```console
 $ sudo pmemtester --percent 90
+[2026-02-15 09:00:00] memtester found: /usr/local/bin/memtester
+[2026-02-15 09:00:00] stressapptest found: /usr/local/bin/stressapptest
 [2026-02-15 09:00:00] pmemtester started: 230400MB across 48 cores, 1 iteration(s)
 [2026-02-15 09:00:00] Phase 1 (memtester) started: 4800MB x 48 instances
 [2026-02-15 11:00:02] Phase 1 (memtester) finished: 1 of 48 instances FAILED (120m 2s)
@@ -295,6 +308,7 @@ When hardware error counters increase during the test (all memtester instances p
 
 ```console
 $ sudo pmemtester --percent 90 --stressapptest off
+[2026-02-15 09:00:00] memtester found: /usr/local/bin/memtester
 [2026-02-15 09:00:00] pmemtester started: 230400MB across 48 cores, 1 iteration(s)
 [2026-02-15 09:00:00] Phase 1 (memtester) started: 4800MB x 48 instances
 [2026-02-15 11:00:02] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
@@ -312,12 +326,36 @@ $ diff /tmp/pmemtester.54322/edac_counters_before.txt /tmp/pmemtester.54322/edac
 
 In this case all 48 memtester instances passed, but 3 correctable ECC errors (ce_count) were detected by EDAC hardware monitoring during the run.
 
+## Example Output: FAIL (stressapptest error)
+
+When stressapptest detects memory corruption during its randomised bus-contention stress pass (all memtester instances passed Phase 1, but stressapptest fails Phase 2):
+
+```console
+$ sudo pmemtester --percent 90
+[2026-02-15 09:00:00] memtester found: /usr/local/bin/memtester
+[2026-02-15 09:00:00] stressapptest found: /usr/local/bin/stressapptest
+[2026-02-15 09:00:00] pmemtester started: 230400MB across 48 cores, 1 iteration(s)
+[2026-02-15 09:00:00] Phase 1 (memtester) started: 4800MB x 48 instances
+[2026-02-15 11:00:02] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
+[2026-02-15 11:00:02] EDAC after Phase 1: no errors detected
+[2026-02-15 11:00:02] Phase 2 (stressapptest) started: 230400MB, 7202s
+[2026-02-15 11:00:02] Phase 2 ETA: 2026-02-15 13:00:04 (120m 2s)
+[2026-02-15 12:34:56] Phase 2 (stressapptest) finished: FAILED (94m 54s)
+[2026-02-15 12:34:56] Total duration: 214m 56s
+FAIL (stressapptest)
+$ echo $?
+1
+```
+
+This is an important case: memtester's deterministic patterns found no stuck bits, but stressapptest's randomised concurrent traffic revealed a timing margin failure or electrically weak RAM. This is exactly the kind of intermittent failure that stressapptest was designed to catch (see [Testing philosophy](#testing-philosophy-probe-hammer-chaos-monkey-probe--hammer--observe)).
+
 ## Execution Flow
 
 ```workflow
 parse_args --> validate_args --> color_init --> find_memtester --> resolve_stressapptest
     --> calculate_test_ram_kb --> get_core_count --> divide_ram_per_core_mb
     --> validate_ram_params --> check_memlock_sufficient --> init_logs
+    --> [report binary detection]
     --> [EDAC before snapshot]
     --> Phase 1: run_all_memtesters --> wait_and_collect
     --> print Phase 1 result (pass/fail count + duration)
@@ -331,7 +369,7 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-282 tests (224 unit + 58 integration).
+287 tests (224 unit + 63 integration).
 
 ```bash
 make test              # Run all tests (unit + integration)
@@ -376,7 +414,7 @@ Distributions that package memtester (all install to `/usr/bin/memtester`):
 ## Requirements
 
 - **memtester** binary (not bundled) -- [pyropus.ca](https://pyropus.ca./software/memtester/). pmemtester looks for `memtester` in `/usr/local/bin` by default. Override at runtime with `--memtester-dir DIR`, or patch the default at install time with `make install MEMTESTER_DIR=/usr/bin` (see [Distro packaging](#distro-packaging)).
-- **stressapptest** binary (optional -- auto mode silently skips if absent) -- [github.com/stressapptest](https://github.com/stressapptest/stressapptest). pmemtester looks for `stressapptest` in `/usr/local/bin` by default. Override at runtime with `--stressapptest-dir DIR`, or patch the default at install time with `make install STRESSAPPTEST_DIR=/usr/bin`.
+- **stressapptest** binary (optional -- auto mode reports and skips if absent) -- [github.com/stressapptest](https://github.com/stressapptest/stressapptest). pmemtester looks for `stressapptest` in `/usr/local/bin` by default. Override at runtime with `--stressapptest-dir DIR`, or patch the default at install time with `make install STRESSAPPTEST_DIR=/usr/bin`.
 - Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
 - `lscpu` (from util-linux; falls back to `nproc` from coreutils)
 - EDAC support (optional -- gracefully skipped if absent)

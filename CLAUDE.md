@@ -52,26 +52,30 @@ make coverage
 ### Source Layout
 
 ```tree
-pmemtester                  # Main executable (thin orchestrator)
+/usr/local/bin/                 # Default search path (override with --memtester-dir / --stressapptest-dir)
+├── memtester                   # External: required (not bundled)
+└── stressapptest               # External: optional (not bundled)
+
+pmemtester                      # Main executable (thin orchestrator)
 lib/
-├── cli.sh                  # Argument parsing and validation
-├── color.sh                # Coloured terminal output (PASS/FAIL/WARN)
-├── edac.sh                 # EDAC message/counter capture and comparison
-├── logging.sh              # Per-thread and master log management
-├── math_utils.sh           # Integer arithmetic (ceiling_div, percentage_of, safe_multiply)
-├── memlock.sh              # Kernel memory lock limit checking and configuration
-├── memtester_mgmt.sh       # Find and validate memtester binary
-├── parallel.sh             # Background memtester launch, PID tracking, wait
-├── ram_calc.sh             # RAM allocation math (percentage, per-core division)
-├── stressapptest_mgmt.sh   # Find, validate, and run stressapptest binary
-├── system_detect.sh        # RAM and core count from /proc/meminfo and lscpu
-├── timing.sh               # Timing, status output, phase formatting
-└── unit_convert.sh         # kB/MB/bytes conversions
+├── cli.sh                      # Argument parsing and validation
+├── color.sh                    # Coloured terminal output (PASS/FAIL/WARN)
+├── edac.sh                     # EDAC message/counter capture and comparison
+├── logging.sh                  # Per-thread and master log management
+├── math_utils.sh               # Integer arithmetic (ceiling_div, percentage_of, safe_multiply)
+├── memlock.sh                  # Kernel memory lock limit checking and configuration
+├── memtester_mgmt.sh           # Find and validate memtester binary
+├── parallel.sh                 # Background memtester launch, PID tracking, wait
+├── ram_calc.sh                 # RAM allocation math (percentage, per-core division)
+├── stressapptest_mgmt.sh       # Find, validate, and run stressapptest binary
+├── system_detect.sh            # RAM and core count from /proc/meminfo and lscpu
+├── timing.sh                   # Timing, status output, phase formatting
+└── unit_convert.sh             # kB/MB/bytes conversions
 ```
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `check_memlock_sufficient` → `init_logs` → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `check_memlock_sufficient` → `init_logs` → (report binary detection) → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
 
 ### Test Infrastructure
 
