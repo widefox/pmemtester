@@ -92,11 +92,11 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 
 | Scenario | memtester | stressapptest | stress-ng | pmemtester |
 |----------|-----------|---------------|-----------|------------|
-| **Dead capacitor (hard fault)** | Excellent — identifies the exact address | Good — may miss if random patterns don't hit the cell | Good — depends on stressor used | Excellent — memtester patterns + EDAC confirms hardware error |
-| **Overheating RAM** | Poor — generates very little heat or bus load | Excellent — saturates bandwidth, stresses thermal envelope | Very good — significant heat under multi-worker load | Very good — parallel memtester + stressapptest second pass |
-| **Bad memory controller** | Poor — sequential single-threaded load is too light | Excellent — this is its primary design goal | Good — high concurrent load stresses controller | Very good — parallel load + stressapptest randomised stress |
-| **Power supply / VRM instability** | Poor — low current draw | Excellent — large current transients reveal weak PSUs | Good — high sustained load | Good — parallel load + stressapptest draws significant current |
-| **Rowhammer vulnerability** | No | No | Yes — has specific rowhammer stressors | No (memtester does not target rowhammer) |
+| **Dead capacitor (hard fault)** | Excellent — identifies the exact address | Good — may miss if random patterns don't hit the cell | Good — depends on stressor used | Excellent — memtester patterns identify the address + EDAC confirms hardware error |
+| **Overheating RAM** | Poor — generates very little heat or bus load | Excellent — saturates bandwidth, stresses thermal envelope | Very good — significant heat under multi-worker load | Excellent — parallel memtester sustains load, stressapptest second pass saturates bandwidth, EDAC detects thermally-triggered ECC errors |
+| **Bad memory controller** | Poor — sequential single-threaded load is too light | Excellent — this is its primary design goal | Good — high concurrent load stresses controller | Excellent — parallel memtester + stressapptest randomised stress both flood the controller, EDAC catches controller-induced ECC errors |
+| **Power supply / VRM instability** | Poor — low current draw | Excellent — large current transients reveal weak PSUs | Good — high sustained load | Excellent — parallel memtester + stressapptest draw the same current as stressapptest alone, EDAC catches power-induced bit flips that ECC corrects silently |
+| **Rowhammer vulnerability** | No | No | Yes — has specific rowhammer stressors | No (neither memtester nor stressapptest target rowhammer) |
 
 ### Feature comparison
 
@@ -104,11 +104,11 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 |---------|-----------|---------------|-----------|------------|
 | Concurrency | Single-threaded | Multi-threaded (1 per core) | Massively parallel (N workers) | 1 memtester per core |
 | Memory locking | `mlock` (may fail silently) | `mlock` on large allocations | `mlock`, `mmap`, `memfd`, etc. | `mlock` with pre-validation (`check_memlock_sufficient`) |
-| DMA / bus stress | None — pure CPU-to-RAM | High — disk/network threads stress the bus | Variable — can stress I/O and RAM simultaneously | Optional — stressapptest second pass adds bus stress |
+| DMA / bus stress | None — pure CPU-to-RAM | High — disk/network threads stress the bus | Variable — can stress I/O and RAM simultaneously | High — stressapptest second pass (by default) adds bus stress |
 | ECC/EDAC detection | No | No | No | Yes — EDAC counter comparison (before/between/after phases) |
-| Pattern depth per location | ~2,590 sweeps/loop | Statistical (CRC-verified) | Configurable | ~2,590 sweeps/loop |
-| Bus saturation | ~15-25% of peak ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/)) | ~75-85% of peak | Variable | ~75-90% of peak ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/)) |
-| Verification | Immediate after each write | Asynchronous CRC checksum | Immediate or checksum | Immediate after each write |
+| Pattern depth per location | ~2,590 sweeps/loop | Statistical (CRC-verified) | Configurable | Phase 1: ~2,590 sweeps/loop; Phase 2: statistical (CRC-verified) |
+| Bus saturation | ~15-25% of peak ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/)) | ~75-85% of peak | Variable | Phase 1: ~75-90% of peak ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/)); Phase 2: ~75-85% |
+| Verification | Immediate after each write | Asynchronous CRC checksum | Immediate or checksum | Phase 1: immediate after each write; Phase 2: asynchronous CRC |
 | CLI complexity | Simple: `memtester 10G` | Moderate: `stressapptest -W -s 60 -M 10000` | Complex: `stress-ng --vm 4 --vm-bytes 90%` | Simple: `pmemtester --percent 90` |
 
 ### Where pmemtester fits
