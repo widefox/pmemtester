@@ -44,7 +44,7 @@ References: [memtester source: tests.c](https://github.com/jnavila/memtester/blo
 
 Each tool uses a fundamentally different algorithm, targeting different failure modes.
 
-### memtester: sequential deterministic patterns ("microscope")
+### memtester: sequential deterministic patterns ("probe")
 
 memtester allocates a buffer, locks it into RAM with `mlock`, and runs 15 pattern tests sequentially on that region. Each test writes a known pattern, reads it back, and compares:
 
@@ -113,7 +113,7 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 
 ### Where pmemtester fits
 
-pmemtester wraps memtester's thorough 15-pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC hardware error monitoring (detecting errors invisible to all three tools). pmemtester also runs an optional stressapptest second pass after memtester completes (enabled by default in `auto` mode when the binary is present), combining both testing approaches in a single tool. It is a "microscope with bus saturation" — deterministic patterns at near-peak memory bandwidth, randomised stress testing, plus hardware error detection.
+pmemtester wraps memtester's thorough 15-pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC hardware error monitoring (detecting errors invisible to all three tools). pmemtester also runs an optional stressapptest second pass after memtester completes (enabled by default in `auto` mode when the binary is present), combining both testing approaches in a single tool. It is "probe + hammer + observe" — deterministic patterns at near-peak memory bandwidth, randomised stress testing, plus hardware error detection down to single-bit ECC corrections.
 
 References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [stressapptest source](https://github.com/stressapptest/stressapptest), [Google: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [stress-ng vm stressors](https://wiki.ubuntu.com/Kernel/Reference/stress-ng), [stress-ng source: stress-vm.c](https://github.com/ColinIanKing/stress-ng/blob/master/stress-vm.c), [Kim et al., "Flipping Bits in Memory Without Accessing Them" (ISCA 2014, rowhammer)](https://users.ece.cmu.edu/~yoMDL/papers/kim-isca14.pdf).
 
