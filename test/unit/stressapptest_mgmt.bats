@@ -61,7 +61,7 @@ exit 0
 MOCK
     chmod +x "${TEST_DIR}/stressapptest"
     init_logs "$TEST_DIR" 0
-    run run_stressapptest "${TEST_DIR}/stressapptest" 10 256 2 "$TEST_DIR"
+    run run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR"
     assert_success
 }
 
@@ -73,7 +73,7 @@ exit 1
 MOCK
     chmod +x "${TEST_DIR}/stressapptest"
     init_logs "$TEST_DIR" 0
-    run run_stressapptest "${TEST_DIR}/stressapptest" 10 256 2 "$TEST_DIR"
+    run run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR"
     assert_failure
 }
 
@@ -85,7 +85,7 @@ exit 0
 MOCK
     chmod +x "${TEST_DIR}/stressapptest"
     init_logs "$TEST_DIR" 0
-    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 2 "$TEST_DIR"
+    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR"
     [[ -f "${TEST_DIR}/stressapptest.log" ]]
 }
 
@@ -97,10 +97,23 @@ exit 0
 MOCK
     chmod +x "${TEST_DIR}/stressapptest"
     init_logs "$TEST_DIR" 0
-    run_stressapptest "${TEST_DIR}/stressapptest" 60 512 4 "$TEST_DIR"
+    run_stressapptest "${TEST_DIR}/stressapptest" 60 512 "$TEST_DIR"
     grep -q -- "-s 60" "${TEST_DIR}/stressapptest.log"
     grep -q -- "-M 512" "${TEST_DIR}/stressapptest.log"
-    grep -q -- "-m 4" "${TEST_DIR}/stressapptest.log"
+    ! grep -q -- "-m" "${TEST_DIR}/stressapptest.log"
+}
+
+@test "run_stressapptest does not pass -m flag (let stressapptest auto-detect)" {
+    cat > "${TEST_DIR}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${TEST_DIR}/stressapptest"
+    init_logs "$TEST_DIR" 0
+    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR"
+    # stressapptest auto-detects thread count from logical CPUs
+    ! grep -q -- "-m" "${TEST_DIR}/stressapptest.log"
 }
 
 @test "run_stressapptest logs start to master log" {
@@ -111,7 +124,7 @@ exit 0
 MOCK
     chmod +x "${TEST_DIR}/stressapptest"
     init_logs "$TEST_DIR" 0
-    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 2 "$TEST_DIR"
+    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR"
     grep -q "stressapptest" "${TEST_DIR}/master.log"
     grep -q "Starting" "${TEST_DIR}/master.log"
 }
@@ -124,7 +137,7 @@ exit 0
 MOCK
     chmod +x "${TEST_DIR}/stressapptest"
     init_logs "$TEST_DIR" 0
-    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 2 "$TEST_DIR"
+    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR"
     grep -q "PASSED" "${TEST_DIR}/master.log"
 }
 
@@ -136,7 +149,7 @@ exit 1
 MOCK
     chmod +x "${TEST_DIR}/stressapptest"
     init_logs "$TEST_DIR" 0
-    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 2 "$TEST_DIR" || true
+    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR" || true
     grep -q "FAILED" "${TEST_DIR}/master.log"
 }
 
@@ -149,6 +162,6 @@ exit 0
 MOCK
     chmod +x "${TEST_DIR}/stressapptest"
     init_logs "$TEST_DIR" 0
-    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 2 "$TEST_DIR"
+    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR"
     grep -q "stderr error" "${TEST_DIR}/stressapptest.log"
 }

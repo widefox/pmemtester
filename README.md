@@ -129,7 +129,7 @@ Specify an explicit duration with `--stressapptest-seconds N` (in seconds).
 
 ### Memory
 
-stressapptest receives the same total RAM as the memtester pass: `ram_per_core_mb * core_count`. For example, if pmemtester allocated 4800 MB per core across 48 cores, stressapptest gets `4800 * 48 = 230400` MB. The thread count (`-m`) matches the core count.
+stressapptest receives the same total RAM as the memtester pass: `ram_per_core_mb * core_count`. For example, if pmemtester allocated 4800 MB per core across 48 cores, stressapptest gets `4800 * 48 = 230400` MB. The thread count is left to stressapptest's auto-detection (1 per logical CPU, via `sysconf(_SC_NPROCESSORS_ONLN)`).
 
 ### EDAC
 
@@ -237,9 +237,9 @@ pmemtester creates a log directory at `/tmp/pmemtester.<PID>/` (or `--log-dir`):
 [2026-02-15 11:00:01] [INFO] PASSED
 [2026-02-15 11:00:02] [INFO] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
 [2026-02-15 11:00:02] [INFO] EDAC after Phase 1: no errors detected
-[2026-02-15 11:00:02] [INFO] Phase 2 (stressapptest) started: 230400MB, 7202s, 48 threads
+[2026-02-15 11:00:02] [INFO] Phase 2 (stressapptest) started: 230400MB, 7202s
 [2026-02-15 11:00:02] [INFO] Phase 2 ETA: 2026-02-15 13:00:04 (120m 2s)
-[2026-02-15 11:00:02] [INFO] Starting stressapptest: 230400MB, 7202s, 48 threads
+[2026-02-15 11:00:02] [INFO] Starting stressapptest: 230400MB, 7202s
 [2026-02-15 13:00:04] [INFO] stressapptest PASSED
 [2026-02-15 13:00:04] [INFO] Phase 2 (stressapptest) finished: PASSED (120m 2s)
 [2026-02-15 13:00:04] [INFO] Total duration: 240m 4s
@@ -256,7 +256,7 @@ $ sudo pmemtester --percent 90 --log-dir /tmp/memtest-run
 [2026-02-15 09:00:00] Phase 1 (memtester) started: 4800MB x 48 instances
 [2026-02-15 11:00:02] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
 [2026-02-15 11:00:02] EDAC after Phase 1: no errors detected
-[2026-02-15 11:00:02] Phase 2 (stressapptest) started: 230400MB, 7202s, 48 threads
+[2026-02-15 11:00:02] Phase 2 (stressapptest) started: 230400MB, 7202s
 [2026-02-15 11:00:02] Phase 2 ETA: 2026-02-15 13:00:04 (120m 2s)
 [2026-02-15 13:00:04] Phase 2 (stressapptest) finished: PASSED (120m 2s)
 [2026-02-15 13:00:04] Total duration: 240m 4s
@@ -330,7 +330,7 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-281 tests (223 unit + 58 integration).
+282 tests (224 unit + 58 integration).
 
 ```bash
 make test              # Run all tests (unit + integration)
@@ -456,7 +456,7 @@ Each major userspace tool takes a fundamentally different approach to finding me
 
 **memtester** is single-threaded and predictable. It creates very little electrical noise, so a DIMM that is "mostly fine" but fails only when hot or when voltage drops slightly may pass. Google developed stressapptest specifically because deterministic tools were passing hardware that failed in production ([Google Open Source Blog](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html)).
 
-**stressapptest** spawns threads equal to the number of CPU cores, racing them against each other with randomised copies, bit inversions, and disk-to-RAM transfers. This maximises bus contention and creates ground bounce and signal interference, revealing electrically weak RAM. It is widely considered the best userspace tool for finding intermittent stability errors on DDR4/DDR5 systems.
+**stressapptest** spawns threads equal to the number of logical CPUs by default (including SMT threads), racing them against each other with randomised copies, bit inversions, and disk-to-RAM transfers. This maximises bus contention and creates ground bounce and signal interference, revealing electrically weak RAM. It is widely considered the best userspace tool for finding intermittent stability errors on DDR4/DDR5 systems.
 
 **stress-ng** can mimic memtester's patterns but adds OS-level chaos: forcing paging storms, exercising rowhammer patterns, and thrashing the virtual memory manager. It finds bugs where the memory subsystem interacts poorly with the kernel.
 

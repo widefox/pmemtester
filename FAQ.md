@@ -6,7 +6,7 @@ pmemtester runs in two phases:
 
 1. **Phase 1 — memtester (deterministic patterns):** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels), pmemtester runs 48 instances of 4800 MB each, completing Phase 1 in ~2 hours (1 loop). A single memtester instance testing the same 225 GB would take roughly 4-5x longer (~8-10 hours vs ~2 hours), limited by memory bandwidth saturation rather than core count — see [Why does parallel memtester help?](#why-does-parallel-memtester-help). After Phase 1 finishes, EDAC counters are checked immediately and the result is printed — so you know the hardware error state before Phase 2 begins.
 
-2. **Phase 2 — stressapptest (randomised stress):** Runs stressapptest with the same total memory and thread count as Phase 1. By default (`--stressapptest-seconds 0`), the duration matches Phase 1's wall-clock time, so this phase takes approximately the same time. An ETA is printed at the start of Phase 2. Use `--stressapptest off` to skip this phase entirely, or `--stressapptest-seconds N` to set an explicit duration.
+2. **Phase 2 — stressapptest (randomised stress):** Runs stressapptest with the same total memory as Phase 1. The thread count is left to stressapptest's auto-detection (1 per logical CPU). By default (`--stressapptest-seconds 0`), the duration matches Phase 1's wall-clock time, so this phase takes approximately the same time. An ETA is printed at the start of Phase 2. Use `--stressapptest off` to skip this phase entirely, or `--stressapptest-seconds N` to set an explicit duration.
 
 The Phase 1 memtester run determines the stressapptest duration: if memtester takes 2 hours, stressapptest also runs for 2 hours (unless overridden). Total run time approximately doubles compared to memtester alone. Status messages with wall-clock timestamps are printed at each phase boundary (start, finish with duration, intermediate EDAC result, Phase 2 ETA).
 
@@ -32,7 +32,7 @@ memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pas
 | **Test method** | 15 deterministic pattern tests (~2,590 sweeps/loop) | Randomized block copies with CRC |
 | **Primary focus** | RAM stick defects (cell-level faults) | Memory subsystem under stress (controller, bus) |
 | **Targets** | Stuck bits, coupling faults, address decoder faults | Bus/interface timing, signal integrity |
-| **Threading** | 1 memtester per core | 2 threads per CPU (auto) |
+| **Threading** | 1 memtester per physical core | 1 thread per logical CPU (auto-detected) |
 | **ECC/EDAC detection** | Yes (before/between/after comparison) | No |
 | **Throughput** | ~8-10 GB/s per core on Xeon; ~15-20 GB/s on desktop/AMD | Hardware-dependent (stressapptest reports MB/s in output) |
 | **Duration** | Fixed (per-loop completion) | User-specified (continuous) |
@@ -63,7 +63,7 @@ Total: ~2,590 buffer sweeps per loop. Throughput is bounded by single-core memor
 
 Developed by Google specifically because deterministic tools were passing hardware that failed in production. The algorithm is designed to maximise memory bus contention:
 
-- Spawns threads equal to the number of CPU cores
+- Spawns threads equal to the number of logical CPUs by default (includes SMT threads; `-m N` to override)
 - **Randomised Copy**: Thread A copies a large chunk from address X to address Y
 - **Invert**: Thread B reads from address Z, flips all bits, writes back
 - **Disk-to-RAM**: Thread C writes data to disk and reads it back into RAM (stresses the DMA bus)
@@ -102,7 +102,7 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 
 | Feature | memtester | stressapptest | stress-ng | pmemtester |
 |---------|-----------|---------------|-----------|------------|
-| Concurrency | Single-threaded | Multi-threaded (1 per core) | Massively parallel (N workers) | 1 memtester per core |
+| Concurrency | Single-threaded | 1 per logical CPU (auto) | Massively parallel (N workers) | 1 memtester per physical core |
 | Memory locking | `mlock` (may fail silently) | `mlock` on large allocations | `mlock`, `mmap`, `memfd`, etc. | `mlock` with pre-validation (`check_memlock_sufficient`) |
 | DMA / bus stress | None — pure CPU-to-RAM | High — disk/network threads stress the bus | Variable — can stress I/O and RAM simultaneously | High — stressapptest second pass (by default) adds bus stress |
 | ECC/EDAC detection | No | No | No | Yes — EDAC counter comparison (before/between/after phases) |
@@ -113,7 +113,7 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 
 ### Where pmemtester fits
 
-pmemtester wraps memtester's thorough 15-pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC hardware error monitoring (detecting errors invisible to all three tools). pmemtester also runs an optional stressapptest second pass after memtester completes (enabled by default in `auto` mode when the binary is present), combining both testing approaches in a single tool. It is "probe + hammer + observe" — deterministic patterns at near-peak memory bandwidth, randomised stress testing, plus hardware error detection down to single-bit ECC corrections.
+pmemtester wraps memtester's thorough 15-pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC hardware error monitoring (detecting errors invisible to all three tools). By default, pmemtester runs a stressapptest second pass after memtester completes (`auto` mode: runs when the binary is present, skips otherwise), combining both testing approaches in a single tool. It is "probe + hammer + observe" — deterministic patterns at near-peak memory bandwidth, randomised stress testing, plus hardware error detection down to single-bit ECC corrections.
 
 References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [stressapptest source](https://github.com/stressapptest/stressapptest), [Google: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [stress-ng vm stressors](https://wiki.ubuntu.com/Kernel/Reference/stress-ng), [stress-ng source: stress-vm.c](https://github.com/ColinIanKing/stress-ng/blob/master/stress-vm.c), [Kim et al., "Flipping Bits in Memory Without Accessing Them" (ISCA 2014, rowhammer)](https://users.ece.cmu.edu/~yoMDL/papers/kim-isca14.pdf).
 

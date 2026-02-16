@@ -103,10 +103,10 @@ main() {
                     sat_seconds=1
                 fi
             fi
-            print_status "Phase 2 (stressapptest) started: ${total_mb}MB, ${sat_seconds}s, ${core_count} threads" "$log_dir"
+            print_status "Phase 2 (stressapptest) started: ${total_mb}MB, ${sat_seconds}s" "$log_dir"
             print_status "Phase 2 ETA: $(format_eta "$sat_seconds") ($(format_duration "$sat_seconds"))" "$log_dir"
             local phase2_start=$SECONDS
-            run_stressapptest "$stressapptest_path" "$sat_seconds" "$total_mb" "$core_count" "$log_dir" || stressapptest_result=1
+            run_stressapptest "$stressapptest_path" "$sat_seconds" "$total_mb" "$log_dir" || stressapptest_result=1
             local phase2_elapsed=$(( SECONDS - phase2_start ))
             if [[ "$stressapptest_result" -eq 0 ]]; then
                 print_status "Phase 2 (stressapptest) finished: PASSED ($(format_duration "$phase2_elapsed"))" "$log_dir"
