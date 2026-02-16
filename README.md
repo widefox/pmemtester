@@ -13,7 +13,8 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/), and
 - Configurable RAM percentage (default 90% of available)
 - RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
-- Linux EDAC hardware error detection (intermediate check after memtester, final check spanning both passes)
+- Linux EDAC hardware error detection with intermediate results after memtester and final check spanning both passes
+- Immediate EDAC feedback between phases — know your hardware error state before waiting for stressapptest
 - Optionally allow correctable EDAC errors (`--allow-ce`); only fail on uncorrectable (UE)
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester, stressapptest, and EDAC results
@@ -61,7 +62,7 @@ The `--memtester-dir` and `--stressapptest-dir` defaults may differ on distro-pa
 
 ECC hardware silently corrects single-bit errors before userspace reads the data. No userspace memory stress test — memtester, stressapptest, stress-ng, or any other — can detect a correctable ECC error on its own. A DIMM can be accumulating correctable errors (possibly an indicator of failure; see [FAQ](FAQ.md#do-correctable-errors-predict-future-uncorrectable-errors)) while every test tool reports PASS.
 
-pmemtester is the first Linux memory stress tester to integrate [EDAC](https://docs.kernel.org/driver-api/edac.html) monitoring. It snapshots hardware error counters before and after the test and fails if any new errors appeared during the run. The `--allow-ce` flag lets you distinguish between correctable errors (log and monitor) and uncorrectable errors (fail immediately), matching modern vendor guidance that treats CEs as a monitoring signal rather than an automatic replacement trigger (see [FAQ](FAQ.md#how-many-correctable-errors-before-replacing-a-dimm)).
+pmemtester is the first Linux memory stress tester to integrate [EDAC](https://docs.kernel.org/driver-api/edac.html) monitoring. It snapshots hardware error counters before, between, and after test phases — reporting intermediate results immediately after memtester completes (so you know the hardware error state before waiting for stressapptest) and failing if any new errors appeared during the run. The `--allow-ce` flag lets you distinguish between correctable errors (log and monitor) and uncorrectable errors (fail immediately), matching modern vendor guidance that treats CEs as a monitoring signal rather than an automatic replacement trigger (see [FAQ](FAQ.md#how-many-correctable-errors-before-replacing-a-dimm)).
 
 Without EDAC integration, the only alternative is to run a stress tool in one terminal and rasdaemon or manual `edac-util` checks in another — and hope you remember to compare before and after.
 
@@ -379,7 +380,7 @@ Distributions that package memtester (all install to `/usr/bin/memtester`):
 
 ## EDAC Compatibility
 
-pmemtester checks Linux [EDAC](https://docs.kernel.org/driver-api/edac.html) (Error Detection and Correction) hardware error counters before and after the memory test when available. **ECC RAM is required** for EDAC to report anything -- on non-ECC systems the EDAC driver detects no ECC capability and does not load, so pmemtester gracefully skips the check.
+pmemtester checks Linux [EDAC](https://docs.kernel.org/driver-api/edac.html) (Error Detection and Correction) hardware error counters before, between, and after test phases when available. **ECC RAM is required** for EDAC to report anything -- on non-ECC systems the EDAC driver detects no ECC capability and does not load, so pmemtester gracefully skips the check.
 
 Nearly all major distros enable `CONFIG_EDAC=y` with hardware drivers as modules, and EDAC is available on most Linux-supported architectures (x86, ARM64, PowerPC, RISC-V, LoongArch). See [FAQ.md](FAQ.md#which-linux-distros-support-edac) for per-distro and per-architecture compatibility tables.
 
@@ -397,7 +398,7 @@ See [TODO.md](TODO.md) for planned improvements including EDAC region correlatio
 
 | Tool | Environment | Parallel | ECC CE Detection | Active | License |
 |------|-------------|----------|-----------------|--------|---------|
-| **pmemtester** | Userspace | Yes | **Yes** (EDAC before/after) | Yes (v0.3, 2026) | GPL-2.0 |
+| **pmemtester** | Userspace | Yes | **Yes** (EDAC before/between/after) | Yes (v0.3, 2026) | GPL-2.0 |
 | memtester | Userspace | No | No | Yes (v4.7.1, 2024) | GPL-2.0 |
 | stressapptest | Userspace | Yes | No | Low (v1.0.11, 2023) | Apache-2.0 |
 | stress-ng | Userspace | Yes | No | Yes (monthly releases) | GPL-2.0 |

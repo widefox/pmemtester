@@ -33,7 +33,7 @@ memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pas
 | **Primary focus** | RAM stick defects (cell-level faults) | Memory subsystem under stress (controller, bus) |
 | **Targets** | Stuck bits, coupling faults, address decoder faults | Bus/interface timing, signal integrity |
 | **Threading** | 1 memtester per core | 2 threads per CPU (auto) |
-| **ECC/EDAC detection** | Yes (before/after comparison) | No |
+| **ECC/EDAC detection** | Yes (before/between/after comparison) | No |
 | **Throughput** | ~8-10 GB/s per core on Xeon; ~15-20 GB/s on desktop/AMD | Hardware-dependent (stressapptest reports MB/s in output) |
 | **Duration** | Fixed (per-loop completion) | User-specified (continuous) |
 | **Patterns per location** | ~2,590 per loop | Randomized (statistical coverage) |
@@ -105,7 +105,7 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 | Concurrency | Single-threaded | Multi-threaded (1 per core) | Massively parallel (N workers) | 1 memtester per core |
 | Memory locking | `mlock` (may fail silently) | `mlock` on large allocations | `mlock`, `mmap`, `memfd`, etc. | `mlock` with pre-validation (`check_memlock_sufficient`) |
 | DMA / bus stress | None — pure CPU-to-RAM | High — disk/network threads stress the bus | Variable — can stress I/O and RAM simultaneously | Optional — stressapptest second pass adds bus stress |
-| ECC/EDAC detection | No | No | No | Yes — before/after EDAC counter comparison |
+| ECC/EDAC detection | No | No | No | Yes — EDAC counter comparison (before/between/after phases) |
 | Pattern depth per location | ~2,590 sweeps/loop | Statistical (CRC-verified) | Configurable | ~2,590 sweeps/loop |
 | Bus saturation | ~15-25% of peak ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/)) | ~75-85% of peak | Variable | ~75-90% of peak ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/)) |
 | Verification | Immediate after each write | Asynchronous CRC checksum | Immediate or checksum | Immediate after each write |
@@ -530,7 +530,7 @@ The `tolerant` sysctl (`/sys/devices/system/edac/mc/mc*/tolerant` or the x86 MCE
 
 ### What this means for pmemtester
 
-pmemtester monitors EDAC counters (`/sys/devices/system/edac/mc/`) before and after the test. If a UE occurs during a pmemtester run:
+pmemtester monitors EDAC counters (`/sys/devices/system/edac/mc/`) before, between, and after test phases — reporting intermediate results immediately after the memtester phase completes. If a UE occurs during a pmemtester run:
 
 1. The kernel's MCE handler fires and may kill one or more memtester processes (SRAR) or poison the page proactively (SRAO/UCNA)
 2. pmemtester detects the killed process via its non-zero exit code
