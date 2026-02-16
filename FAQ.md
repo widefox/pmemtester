@@ -4,7 +4,7 @@
 
 pmemtester runs in two phases:
 
-1. **Phase 1 — memtester (deterministic patterns):** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels), pmemtester runs 48 instances of 4800 MB each, completing Phase 1 in ~2 hours (1 loop). A single memtester instance testing the same 225 GB would take roughly 48x longer.
+1. **Phase 1 — memtester (deterministic patterns):** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels), pmemtester runs 48 instances of 4800 MB each, completing Phase 1 in ~2 hours (1 loop). A single memtester instance testing the same 225 GB would take roughly 4-5x longer (~8-10 hours vs ~2 hours), limited by memory bandwidth saturation rather than core count — see [Why does parallel memtester help?](#why-does-parallel-memtester-help).
 
 2. **Phase 2 — stressapptest (randomised stress):** Runs stressapptest with the same total memory and thread count as Phase 1. By default (`--stressapptest-seconds 0`), the duration matches Phase 1's wall-clock time, so this phase takes approximately the same time. Use `--stressapptest off` to skip this phase entirely, or `--stressapptest-seconds N` to set an explicit duration.
 
@@ -12,7 +12,7 @@ The Phase 1 memtester run determines the stressapptest duration: if memtester ta
 
 | Tool | Configuration | Phase 1 (memtester) | Phase 2 (stressapptest) | Total |
 |------|--------------|---------------------|------------------------|-------|
-| memtester | 1 instance, 225 GB | days (1 loop) | — | days |
+| memtester | 1 instance, 225 GB | ~8-10 hours (1 loop) | — | ~8-10 hours |
 | pmemtester (`--stressapptest off`) | 48 instances, 4800 MB each | ~2 hours (1 loop) | skipped | ~2 hours |
 | pmemtester (default) | 48 instances + stressapptest | ~2 hours (1 loop) | ~2 hours | ~4 hours |
 | pmemtester (`--stressapptest-seconds 3600`) | 48 instances + stressapptest | ~2 hours (1 loop) | 60 min | ~3 hours |

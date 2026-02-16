@@ -65,12 +65,13 @@ lib/
 ├── ram_calc.sh             # RAM allocation math (percentage, per-core division)
 ├── stressapptest_mgmt.sh   # Find, validate, and run stressapptest binary
 ├── system_detect.sh        # RAM and core count from /proc/meminfo and lscpu
+├── timing.sh               # Timing, status output, phase formatting
 └── unit_convert.sh         # kB/MB/bytes conversions
 ```
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `find_memtester` → (resolve stressapptest) → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `check_memlock_sufficient` → `init_logs` → (EDAC before) → `run_all_memtesters` → `wait_and_collect` → (conditional `run_stressapptest`) → (EDAC after) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `check_memlock_sufficient` → `init_logs` → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
 
 ### Test Infrastructure
 

@@ -13,7 +13,7 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/), and
 - Configurable RAM percentage (default 90% of available)
 - RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
-- Linux EDAC hardware error detection (before/after comparison spanning both passes)
+- Linux EDAC hardware error detection (intermediate check after memtester, final check spanning both passes)
 - Optionally allow correctable EDAC errors (`--allow-ce`); only fail on uncorrectable (UE)
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester, stressapptest, and EDAC results
@@ -132,7 +132,7 @@ stressapptest receives the same total RAM as the memtester pass: `ram_per_core_m
 
 ### EDAC
 
-EDAC snapshots are taken once before the memtester pass and once after the stressapptest pass (or after memtester if stressapptest is skipped). This means the EDAC before/after comparison spans both passes — any hardware error during either pass causes a FAIL.
+EDAC snapshots are taken at three points: before Phase 1 (memtester), after Phase 1, and after Phase 2 (stressapptest) or after Phase 1 if stressapptest is skipped. The intermediate snapshot (after Phase 1) is compared against the before-snapshot and the result is printed immediately — this gives the user early visibility into hardware errors before the stressapptest pass begins. For example, if EDAC detects correctable errors during Phase 1, the output shows `EDAC after Phase 1: correctable errors (CE) detected` before Phase 2 starts. The intermediate check is informational: the final pass/fail verdict always uses the before/after comparison spanning both phases, so any hardware error during either phase causes a FAIL.
 
 ### Verdict
 
@@ -161,6 +161,7 @@ lib/
 ├── ram_calc.sh                 # RAM allocation calculations
 ├── stressapptest_mgmt.sh       # Find, validate, and run stressapptest
 ├── system_detect.sh            # RAM and core count detection
+├── timing.sh                   # Timing, status output, phase formatting
 └── unit_convert.sh             # kB/MB/bytes conversions
 test/
 ├── unit/                       # Unit tests (one .bats per lib)
@@ -175,6 +176,7 @@ test/
 │   ├── ram_calc.bats
 │   ├── stressapptest_mgmt.bats
 │   ├── system_detect.bats
+│   ├── timing.bats
 │   └── unit_convert.bats
 ├── integration/
 │   ├── full_run.bats           # End-to-end tests with mocked commands
@@ -309,13 +311,18 @@ In this case all 48 memtester instances passed, but 3 correctable ECC errors (ce
 ## Execution Flow
 
 ```workflow
-parse_args --> validate_args --> find_memtester --> resolve_stressapptest
+parse_args --> validate_args --> color_init --> find_memtester --> resolve_stressapptest
     --> calculate_test_ram_kb --> get_core_count --> divide_ram_per_core_mb
-    --> check_memlock_sufficient --> init_logs --> [EDAC before]
-    --> run_all_memtesters --> wait_and_collect
-    --> [conditional stressapptest] --> [EDAC after]
+    --> check_memlock_sufficient --> init_logs
+    --> [EDAC before]
+    --> Phase 1: run_all_memtesters --> wait_and_collect
+    --> [EDAC mid: intermediate check, informational]
+    --> Phase 2: [conditional stressapptest]
+    --> [EDAC after: final check spanning both phases]
     --> aggregate_logs --> PASS/FAIL
 ```
+
+Status messages with wall-clock timestamps are printed at each phase boundary (start, finish with duration, ETA for Phase 2). The intermediate EDAC check reports results immediately after Phase 1 so the user knows the hardware error state before the stressapptest pass begins. The final verdict uses the before/after EDAC comparison spanning both phases.
 
 ## Testing
 
