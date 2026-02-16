@@ -27,15 +27,16 @@ References: [memtester 64 GB timing estimate (GitHub issue #2)](https://github.c
 
 memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pass, targeting stuck bits and coupling faults with exhaustive patterns (stuck address, walking ones/zeroes, bit flip, checkerboard, etc.). Single-core throughput is limited by the CPU's L1D miss concurrency (Line Fill Buffers), which caps a single thread at ~8-10 GB/s on Intel Xeon server parts or ~15-20 GB/s on desktop/AMD parts with effective prefetching ([McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). memtester's non-sequential write-read-compare patterns get minimal prefetcher benefit, so throughput sits near the lower end of this range. stressapptest uses randomized block copies with CRC verification, targeting memory bus and interface timing issues (signal integrity, timing margins). It moves more data per second but tests fewer distinct bit patterns per memory location. The tools are complementary rather than directly comparable -- they detect different fault types. Additionally, pmemtester integrates EDAC error detection, which neither memtester nor stressapptest does on its own.
 
-| | pmemtester | stressapptest |
+| | **pmemtester** | |
+| | Phase 1 (parallel memtester) | Phase 2 (stressapptest) |
 |---|---|---|
 | **Test method** | 15 deterministic pattern tests (~2,590 sweeps/loop) | Randomized block copies with CRC |
 | **Primary focus** | RAM stick defects (cell-level faults) | Memory subsystem under stress (controller, bus) |
 | **Targets** | Stuck bits, coupling faults, address decoder faults | Bus/interface timing, signal integrity |
 | **Threading** | 1 memtester per physical core | 1 thread per logical CPU (auto-detected) |
-| **ECC/EDAC detection** | Yes (before/between/after comparison) | No |
+| **ECC/EDAC detection** | Yes (before/between phases) | Yes (between/after phases) |
 | **Throughput** | ~8-10 GB/s per core on Xeon; ~15-20 GB/s on desktop/AMD | Hardware-dependent (stressapptest reports MB/s in output) |
-| **Duration** | Fixed (per-loop completion) | User-specified (continuous) |
+| **Duration** | Fixed (per-loop completion) | User-specified or matches Phase 1 time |
 | **Patterns per location** | ~2,590 per loop | Randomized (statistical coverage) |
 
 References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [memtester source: sizes.h](https://github.com/jnavila/memtester/blob/master/sizes.h), [stressapptest repository](https://github.com/stressapptest/stressapptest), [Google Open Source Blog: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [McCalpin: Single-core memory bandwidth (2025)](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/).
