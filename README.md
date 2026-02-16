@@ -34,8 +34,9 @@ sudo make install
 # Run with safe defaults (90% available RAM, 1 iteration)
 sudo pmemtester
 
-# Run with custom settings
-sudo pmemtester --percent 80 --ram-type total --iterations 3
+# Estimate duration: run 1% and multiply by 90 for a full 90% run
+# With stressapptest (default), multiply by 180 (Phase 2 matches Phase 1)
+sudo pmemtester --percent 1 --stressapptest off
 ```
 
 ## Usage
@@ -93,6 +94,16 @@ Using 100% is not safe -- pmemtester itself, the shell, and the OS kernel need s
 | 95% | Low risk | Thorough pre-deployment validation |
 | 98% | Moderate | Dedicated test hosts with minimal services |
 | 100% | OOM likely | Not recommended -- OS needs working memory |
+
+### Custom settings
+
+Combine flags to control RAM percentage, measurement basis, and iteration count:
+
+```bash
+sudo pmemtester --percent 80 --ram-type total --iterations 3
+```
+
+This tests 80% of total RAM (not just available) with 3 memtester iterations per core. Multiple iterations repeat the full pattern suite, increasing the chance of catching intermittent faults at the cost of proportionally longer runtime.
 
 ### Single-socket testing on a multi-socket server
 
