@@ -42,7 +42,7 @@ sudo pmemtester --percent 80 --ram-type total --iterations 3
 
 ```console
 $ pmemtester --help
-Usage: pmemtester [OPTIONS]
+Usage: pmemtester 0.3 [OPTIONS]
 
 Options:
   --percent N              Percentage of RAM to test (1-100, default: 90)
@@ -109,6 +109,21 @@ sudo numactl --cpunodebind=1 --membind=1 pmemtester --percent 90
 This binds both the CPU threads and memory allocation to the specified NUMA node, so only that socket's RAM is tested. The other socket remains fully available for workloads.
 
 **Note:** `--percent 90` in this case applies to the available memory on that NUMA node, not the whole system. Check per-node memory with `numactl --hardware`.
+
+### Estimating test duration
+
+A full 90% RAM test can take hours. To estimate the duration without committing to a full run, test 1% of available RAM and multiply by 90:
+
+```bash
+# Quick 1% timing run
+sudo pmemtester --percent 1 --stressapptest off
+# If this takes 80 seconds, a full 90% run ≈ 80 × 90 = 7200 seconds (2 hours)
+# With stressapptest (default), double it: ≈ 4 hours total
+```
+
+memtester's execution time scales linearly with RAM size (it performs a fixed set of test patterns per byte), so 1% of RAM takes approximately 1/90th the time of 90%. Use `--stressapptest off` for the timing run to measure only the memtester phase; the stressapptest phase duration defaults to matching the memtester phase, so double the estimate for a full two-phase run.
+
+This is useful for capacity planning on unfamiliar hardware where you don't know how long memtester takes per gigabyte.
 
 ## stressapptest Second Pass
 

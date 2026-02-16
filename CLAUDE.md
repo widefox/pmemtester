@@ -75,7 +75,7 @@ lib/
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `check_memlock_sufficient` → `init_logs` → (report binary detection) → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection) → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
 
 ### Test Infrastructure
 
