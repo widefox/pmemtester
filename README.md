@@ -317,16 +317,17 @@ In this case all 48 memtester instances passed, but 3 correctable ECC errors (ce
 ```workflow
 parse_args --> validate_args --> color_init --> find_memtester --> resolve_stressapptest
     --> calculate_test_ram_kb --> get_core_count --> divide_ram_per_core_mb
-    --> check_memlock_sufficient --> init_logs
-    --> [EDAC before]
+    --> validate_ram_params --> check_memlock_sufficient --> init_logs
+    --> [EDAC before snapshot]
     --> Phase 1: run_all_memtesters --> wait_and_collect
-    --> [EDAC mid: intermediate check, informational]
-    --> Phase 2: [conditional stressapptest]
-    --> [EDAC after: final check spanning both phases]
-    --> aggregate_logs --> PASS/FAIL
+    --> print Phase 1 result (pass/fail count + duration)
+    --> [EDAC mid snapshot: compare before vs mid, print result]
+    --> Phase 2: [conditional stressapptest] --> print Phase 2 result
+    --> [EDAC after snapshot: final check spanning both phases]
+    --> aggregate_logs --> print total duration --> PASS/FAIL
 ```
 
-Status messages with wall-clock timestamps are printed at each phase boundary (start, finish with duration, ETA for Phase 2). The intermediate EDAC check reports results immediately after Phase 1 so the user knows the hardware error state before the stressapptest pass begins. The final verdict uses the before/after EDAC comparison spanning both phases.
+Status messages with wall-clock timestamps are printed at each phase boundary (start, finish with duration, ETA for Phase 2). After Phase 1, the memtester result is printed immediately (e.g. `Phase 1 (memtester) finished: all 48 instances passed (120m 2s)` or `1 of 48 instances FAILED`), followed by the intermediate EDAC check (e.g. `EDAC after Phase 1: no errors detected`). This gives the user both the memtester and hardware error state before waiting for stressapptest. The final verdict uses the before/after EDAC comparison spanning both phases.
 
 ## Testing
 

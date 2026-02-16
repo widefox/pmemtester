@@ -4,7 +4,7 @@
 
 pmemtester runs in two phases:
 
-1. **Phase 1 — memtester (deterministic patterns):** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels), pmemtester runs 48 instances of 4800 MB each, completing Phase 1 in ~2 hours (1 loop). A single memtester instance testing the same 225 GB would take roughly 4-5x longer (~8-10 hours vs ~2 hours), limited by memory bandwidth saturation rather than core count — see [Why does parallel memtester help?](#why-does-parallel-memtester-help). After Phase 1 finishes, EDAC counters are checked immediately and the result is printed — so you know the hardware error state before Phase 2 begins.
+1. **Phase 1 — memtester (deterministic patterns):** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels), pmemtester runs 48 instances of 4800 MB each, completing Phase 1 in ~2 hours (1 loop). A single memtester instance testing the same 225 GB would take roughly 4-10x longer, limited by memory bandwidth saturation rather than core count — see [Why does parallel memtester help?](#why-does-parallel-memtester-help) and [throughput estimates](#memtester-throughput-estimates) below. After Phase 1 finishes, EDAC counters are checked immediately and the result is printed — so you know the hardware error state before Phase 2 begins.
 
 2. **Phase 2 — stressapptest (randomised stress):** Runs stressapptest with the same total memory as Phase 1. The thread count is left to stressapptest's auto-detection (1 per logical CPU). By default (`--stressapptest-seconds 0`), the duration matches Phase 1's wall-clock time, so this phase takes approximately the same time. An ETA is printed at the start of Phase 2. Use `--stressapptest off` to skip this phase entirely, or `--stressapptest-seconds N` to set an explicit duration.
 
@@ -12,34 +12,60 @@ The Phase 1 memtester run determines the stressapptest duration: if memtester ta
 
 | Tool | Configuration | Phase 1 (memtester) | Phase 2 (stressapptest) | Total |
 |------|--------------|---------------------|------------------------|-------|
-| memtester | 1 instance, 225 GB | ~8-10 hours (1 loop) | — | ~8-10 hours |
+| memtester | 1 instance, 225 GB | ~8-19 hours† (1 loop) | — | ~8-19 hours |
 | pmemtester (`--stressapptest off`) | 48 instances, 4800 MB each | ~2 hours (1 loop) | skipped | ~2 hours |
 | pmemtester (default) | 48 instances + stressapptest | ~2 hours (1 loop) | ~2 hours | ~4 hours |
 | pmemtester (`--stressapptest-seconds 3600`) | 48 instances + stressapptest | ~2 hours (1 loop) | 60 min | ~3 hours |
+
+†Single-instance memtester estimate is extrapolated, not measured on this system — see [throughput estimates](#memtester-throughput-estimates) below.
 
 Example system: AMD EPYC (1 socket, 48 cores / 96 threads, 256 GB DDR5, 8 channels). pmemtester uses physical cores only (not SMT threads) — see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread).
 
 Aggregate memory bandwidth saturates at ~10+ cores on an 8-channel server platform. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads. No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing.
 
-References: [memtester 64 GB timing estimate (GitHub issue #2)](https://github.com/jnavila/memtester/issues/2).
+### memtester throughput estimates
+
+memtester runs ~2,590 buffer sweeps per loop. Each sweep reads or writes the entire buffer. The wall-clock time for a single-instance run depends on the CPU's effective single-core memory throughput for memtester's non-sequential write-read-compare access patterns.
+
+**Key constraint:** memtester's patterns (walking ones/zeros, stuck address, bit flip) are non-sequential and defeat hardware prefetchers. This means effective throughput is much lower than STREAM Copy bandwidth, which benefits heavily from prefetching. The relevant metric is single-core bandwidth with prefetchers providing minimal benefit — closer to the hardware limit imposed by Line Fill Buffer (LFB) count × cache line size × memory latency.
+
+| Source | Hardware | Measurement | Effective throughput |
+|--------|----------|-------------|---------------------|
+| [McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/) | Xeon Platinum 8280 (Cascade Lake, 2019) | STREAM read, L2 prefetchers disabled | 7.8-8.2 GB/s |
+| [memtester GitHub issue #2](https://github.com/jnavila/memtester/issues/2) | Unknown (user report) | memtester 1 GB in ~5 min | ~8.6 GB/s (inferred from 2,590 sweeps) |
+| [Chips and Cheese](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched) | EPYC 9575F (Turin, DDR5-6000, 2024) | STREAM Copy, 1 thread, prefetchers enabled | ~48 GB/s |
+
+The STREAM numbers with prefetchers enabled (~48 GB/s on Turin) represent an upper bound that memtester will not approach due to its non-sequential access patterns. The prefetchers-disabled measurement (~8 GB/s on Cascade Lake) is closer to memtester's actual behaviour but was measured on 6-year-old hardware. Modern AMD EPYC (Zen 4/5, DDR5) has more Line Fill Buffers and lower memory latency, so effective no-prefetch throughput is likely higher — but by how much is unknown without direct measurement.
+
+**Extrapolated single-instance timing for 225 GB (1 loop, 2,590 sweeps):**
+
+| Effective throughput | Time per sweep (225 GB) | Total (2,590 sweeps) |
+|---------------------|------------------------|---------------------|
+| 8 GB/s (Cascade Lake-era, no prefetch) | 28 s | ~20 hours |
+| 12 GB/s (estimated modern Xeon, no prefetch) | 19 s | ~14 hours |
+| 15 GB/s (estimated modern EPYC, no prefetch) | 15 s | ~11 hours |
+| 20 GB/s (optimistic, partial prefetch benefit) | 11 s | ~8 hours |
+
+The 8-19 hour range in the timing table above spans the plausible throughput range from conservative (Cascade Lake-era, ~8 GB/s) to optimistic (modern EPYC with partial prefetch benefit, ~20 GB/s). The pmemtester speedup vs single-instance memtester is **4-10x** on this system: 48 parallel instances saturating the memory bus (~75-90% of peak) complete in ~2 hours regardless of where single-instance throughput falls. The exact speedup depends on how much single-core bandwidth memtester achieves on your hardware — lower single-core throughput means a larger speedup from parallelism.
+
+References: [McCalpin: Single-core memory bandwidth (2025)](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/), [memtester 64 GB timing estimate (GitHub issue #2)](https://github.com/jnavila/memtester/issues/2), [Chips and Cheese: AMD's Turin — 5th Gen EPYC Launched (2024)](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched).
 
 ## What does pmemtester test that stressapptest doesn't (and vice versa)?
 
-memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pass, targeting stuck bits and coupling faults with exhaustive patterns (stuck address, walking ones/zeroes, bit flip, checkerboard, etc.). Single-core throughput is limited by the CPU's L1D miss concurrency (Line Fill Buffers), which caps a single thread at ~8-10 GB/s on Intel Xeon server parts or ~15-20 GB/s on desktop/AMD parts with effective prefetching ([McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). memtester's non-sequential write-read-compare patterns get minimal prefetcher benefit, so throughput sits near the lower end of this range. stressapptest uses randomized block copies with CRC verification, targeting memory bus and interface timing issues (signal integrity, timing margins). It moves more data per second but tests fewer distinct bit patterns per memory location. The tools are complementary rather than directly comparable -- they detect different fault types. Additionally, pmemtester integrates EDAC error detection, which neither memtester nor stressapptest does on its own.
+memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pass, targeting stuck bits and coupling faults with exhaustive patterns (stuck address, walking ones/zeroes, bit flip, checkerboard, etc.). Single-core throughput is limited by the CPU's L1D miss concurrency (Line Fill Buffers). STREAM benchmarks with prefetchers enabled show ~48 GB/s on a single core of AMD EPYC 9575F ([Chips and Cheese](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched)) and ~8 GB/s on Intel Xeon Cascade Lake with prefetchers disabled ([McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). However, memtester's non-sequential write-read-compare patterns defeat hardware prefetchers, so effective throughput is much closer to the no-prefetch numbers — estimated at 8-20 GB/s depending on hardware generation (see [throughput estimates](#memtester-throughput-estimates)). stressapptest uses randomized block copies with CRC verification, targeting memory bus and interface timing issues (signal integrity, timing margins). It moves more data per second but tests fewer distinct bit patterns per memory location. The tools are complementary rather than directly comparable — they detect different fault types. Additionally, pmemtester integrates EDAC error detection, which neither memtester nor stressapptest does on its own.
 
-| | **pmemtester** | |
-| | Phase 1 (parallel memtester) | Phase 2 (stressapptest) |
+| **pmemtester** | Phase 1 (parallel memtester) | Phase 2 (stressapptest) |
 |---|---|---|
 | **Test method** | 15 deterministic pattern tests (~2,590 sweeps/loop) | Randomized block copies with CRC |
 | **Primary focus** | RAM stick defects (cell-level faults) | Memory subsystem under stress (controller, bus) |
 | **Targets** | Stuck bits, coupling faults, address decoder faults | Bus/interface timing, signal integrity |
 | **Threading** | 1 memtester per physical core | 1 thread per logical CPU (auto-detected) |
 | **ECC/EDAC detection** | Yes (before/between phases) | Yes (between/after phases) |
-| **Throughput** | ~8-10 GB/s per core on Xeon; ~15-20 GB/s on desktop/AMD | Hardware-dependent (stressapptest reports MB/s in output) |
+| **Throughput** | ~8-20 GB/s effective per core ([varies by hardware](#memtester-throughput-estimates); prefetchers provide minimal benefit) | Hardware-dependent (stressapptest reports MB/s in output) |
 | **Duration** | Fixed (per-loop completion) | User-specified or matches Phase 1 time |
 | **Patterns per location** | ~2,590 per loop | Randomized (statistical coverage) |
 
-References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [memtester source: sizes.h](https://github.com/jnavila/memtester/blob/master/sizes.h), [stressapptest repository](https://github.com/stressapptest/stressapptest), [Google Open Source Blog: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [McCalpin: Single-core memory bandwidth (2025)](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/).
+References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [memtester source: sizes.h](https://github.com/jnavila/memtester/blob/master/sizes.h), [stressapptest repository](https://github.com/stressapptest/stressapptest), [Google Open Source Blog: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [McCalpin: Single-core memory bandwidth (2025)](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/), [Chips and Cheese: AMD's Turin — 5th Gen EPYC Launched (2024)](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched).
 
 ## How do memtester, stressapptest, and stress-ng find errors differently?
 
@@ -54,7 +80,7 @@ memtester allocates a buffer, locks it into RAM with `mlock`, and runs 15 patter
 - **Bit Flip**: Writes a value, reads back, flips all bits, writes, reads back. Catches coupling faults where adjacent cells influence each other.
 - **Checkerboard / Bit Spread / Block Move**: Pattern variations that exercise different physical cell adjacency relationships.
 
-Total: ~2,590 buffer sweeps per loop. Throughput is bounded by single-core memory bandwidth (~8-10 GB/s on Intel Xeon without prefetcher benefit, ~15-20 GB/s on desktop/AMD parts; [McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). memtester's non-sequential access patterns get minimal prefetching, so expect the lower end.
+Total: ~2,590 buffer sweeps per loop. Throughput is bounded by single-core memory bandwidth with minimal prefetcher benefit, estimated at ~8-20 GB/s depending on hardware generation (see [throughput estimates](#memtester-throughput-estimates)). memtester's non-sequential access patterns defeat hardware prefetchers, so effective throughput is far below STREAM benchmarks on the same hardware.
 
 **Strength**: Exhaustive per-location pattern coverage. Finds hard faults (permanently damaged silicon) reliably.
 
@@ -191,7 +217,7 @@ References: [Schroeder et al., "DRAM Errors in the Wild" (2009)](https://cacm.ac
 
 ## Why does parallel memtester help?
 
-A single memtester thread cannot saturate a modern memory bus. CPU cores have a limited number of outstanding memory requests (Line Fill Buffers), so one thread typically achieves only 15-25% of peak memory bandwidth on a server CPU ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/), [McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). Running multiple instances in parallel fills more memory channels simultaneously and reaches 75-90% of peak bandwidth with around 10 threads on current x86 hardware ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/), [Hager 2018](https://blogs.fau.de/hager/archives/8263)) -- roughly a **4-7x speedup** over a single thread on one socket.
+A single memtester thread cannot saturate a modern memory bus. Even for sequential STREAM workloads, one thread achieves only 15-25% of peak memory bandwidth on a server CPU ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/), [McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). memtester's non-sequential patterns defeat hardware prefetchers, so it achieves even less — estimated at ~8-20 GB/s effective on current hardware (see [throughput estimates](#memtester-throughput-estimates)), well below the ~48 GB/s a single core can achieve with prefetching on AMD EPYC Turin ([Chips and Cheese](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched)). Running multiple instances in parallel fills more memory channels simultaneously. Aggregate throughput with ~10 threads reaches 75-90% of peak bandwidth on current x86 hardware ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/), [Hager 2018](https://blogs.fau.de/hager/archives/8263)) — roughly a **4-7x speedup** over a single thread on one socket, with exact speedup depending on how much single-core bandwidth memtester achieves on your hardware.
 
 On multi-socket systems, pmemtester's per-core parallelism also keeps memory accesses NUMA-local. A single memtester process testing both sockets would pay a cross-socket bandwidth penalty (see below), while pmemtester's many independent instances naturally access memory local to the core they run on.
 
