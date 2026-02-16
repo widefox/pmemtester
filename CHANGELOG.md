@@ -11,14 +11,14 @@
 
 ### New CLI flags
 
-- `--stressapptest MODE` — Control stressapptest pass: `auto` (default), `on`, `off`
-- `--stressapptest-seconds N` — Explicit stressapptest duration in seconds (0 = match memtester time)
-- `--stressapptest-dir DIR` — Directory containing stressapptest binary (default: `/usr/local/bin`)
+- `--stressapptest MODE`: Control stressapptest pass: `auto` (default), `on`, `off`
+- `--stressapptest-seconds N`: Explicit stressapptest duration in seconds (0 = match memtester time)
+- `--stressapptest-dir DIR`: Directory containing stressapptest binary (default: `/usr/local/bin`)
 
 ### New source files
 
-- `lib/stressapptest_mgmt.sh` — Find, validate, and run stressapptest binary
-- `lib/timing.sh` — Timing, status output, phase formatting
+- `lib/stressapptest_mgmt.sh`: Find, validate, and run stressapptest binary
+- `lib/timing.sh`: Timing, status output, phase formatting
 
 ### Documentation
 

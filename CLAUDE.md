@@ -89,7 +89,7 @@ lib/
 Bash has no floating-point. All arithmetic must use integer math with careful attention to:
 - **Division order**: Multiply before dividing to preserve precision (e.g., `ram * percent / 100` not `ram / 100 * percent`)
 - **Rounding**: Use `(a + b - 1) / b` for ceiling division when needed
-- **Overflow**: Bash integers are 64-bit signed; intermediate products of large values (bytes) can overflow — work in kB or MB where appropriate
+- **Overflow**: Bash integers are 64-bit signed; intermediate products of large values (bytes) can overflow. Work in kB or MB where appropriate
 - **Units**: Track units explicitly (bytes vs kB vs MB) and convert at boundaries
 - **`(( i++ ))` pitfall**: When `i=0`, the expression evaluates to 0 (falsy) and returns exit code 1 under `set -e`. Use `i=$(( i + 1 ))` instead.
 
@@ -104,8 +104,8 @@ Default settings must never crash the host:
 ### External Dependencies
 
 - `memtester` binary (not bundled)
-- `stressapptest` binary (optional — auto mode silently skips if absent)
-- Linux kernel with EDAC support (optional — gracefully skipped if absent)
+- `stressapptest` binary (optional: auto mode silently skips if absent)
+- Linux kernel with EDAC support (optional: gracefully skipped if absent)
 - Standard Linux utilities: `lscpu`, `nproc` (fallback), `dmesg`, `awk`, `find`, `diff`
 - Test tools: `bats` (1.13.0+), `kcov` (38+), `shellcheck` (0.10.0+)
 

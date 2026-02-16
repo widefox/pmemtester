@@ -2,7 +2,7 @@
 
 [![License: GPL-2.0-only](https://img.shields.io/badge/License-GPL--2.0--only-blue.svg)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html)
 
-A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with stressapptest integration and EDAC monitoring — the first Linux memory tester that combines deterministic pattern testing, bus-contention stress, and ECC error detection in a single run. *Probe every cell, hammer the bus, observe down to single-bit errors.*
+A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with stressapptest integration and EDAC monitoring: the first Linux memory tester that combines deterministic pattern testing, bus-contention stress, and ECC error detection in a single run. *Probe every cell, hammer the bus, observe down to single-bit errors.*
 
 **Repository:** https://github.com/widefox/pmemtester
 
@@ -14,7 +14,7 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 - RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
 - Linux EDAC hardware error detection with intermediate results after memtester and final check spanning both passes
-- Immediate EDAC feedback between phases — know your hardware error state before waiting for stressapptest
+- Immediate EDAC feedback between phases: know your hardware error state before waiting for stressapptest
 - Optionally allow correctable EDAC errors (`--allow-ce`); only fail on uncorrectable (UE)
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester, stressapptest, and EDAC results
@@ -23,11 +23,11 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 
 ### Dependencies
 
-- **memtester** (required) — [pyropus.ca/software/memtester](https://pyropus.ca./software/memtester/)
-- **stressapptest** (optional — auto mode silently skips if absent) — Homepage & source: [github.com/stressapptest/stressapptest](https://github.com/stressapptest/stressapptest)
+- **memtester** (required): [pyropus.ca/software/memtester](https://pyropus.ca./software/memtester/)
+- **stressapptest** (optional: auto mode silently skips if absent): [github.com/stressapptest/stressapptest](https://github.com/stressapptest/stressapptest)
 - Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
 - `lscpu` (from util-linux; falls back to `nproc` from coreutils)
-- EDAC support (optional — gracefully skipped if absent)
+- EDAC support (optional: gracefully skipped if absent)
 
 Install dependencies from your distribution's package manager or build from source:
 
@@ -118,11 +118,11 @@ The `--memtester-dir` and `--stressapptest-dir` defaults may differ on distro-pa
 
 ## Why EDAC Matters
 
-ECC hardware silently corrects single-bit errors before userspace reads the data. No userspace memory stress test — memtester, stressapptest, stress-ng, or any other — can detect a correctable ECC error on its own. A DIMM can be accumulating correctable errors (possibly an indicator of failure; see [FAQ](FAQ.md#do-correctable-errors-predict-future-uncorrectable-errors)) while every test tool reports PASS.
+ECC hardware silently corrects single-bit errors before userspace reads the data. No userspace memory stress test (memtester, stressapptest, stress-ng, or any other) can detect a correctable ECC error on its own. A DIMM can be accumulating correctable errors (possibly an indicator of failure; see [FAQ](FAQ.md#do-correctable-errors-predict-future-uncorrectable-errors)) while every test tool reports PASS.
 
-pmemtester is the first Linux memory stress tester to integrate [EDAC](https://docs.kernel.org/driver-api/edac.html) monitoring. It snapshots hardware error counters before, between, and after test phases — reporting intermediate results immediately after memtester completes (so you know the hardware error state before waiting for stressapptest) and failing if any new errors appeared during the run. The `--allow-ce` flag lets you distinguish between correctable errors (log and monitor) and uncorrectable errors (fail immediately), matching modern vendor guidance that treats CEs as a monitoring signal rather than an automatic replacement trigger (see [FAQ](FAQ.md#how-many-correctable-errors-before-replacing-a-dimm)).
+pmemtester is the first Linux memory stress tester to integrate [EDAC](https://docs.kernel.org/driver-api/edac.html) monitoring. It snapshots hardware error counters before, between, and after test phases, reporting intermediate results immediately after memtester completes (so you know the hardware error state before waiting for stressapptest) and failing if any new errors appeared during the run. The `--allow-ce` flag lets you distinguish between correctable errors (log and monitor) and uncorrectable errors (fail immediately), matching modern vendor guidance that treats CEs as a monitoring signal rather than an automatic replacement trigger (see [FAQ](FAQ.md#how-many-correctable-errors-before-replacing-a-dimm)).
 
-Without EDAC integration, the only alternative is to run a stress tool in one terminal and rasdaemon or manual `edac-util` checks in another — and hope you remember to compare before and after.
+Without EDAC integration, the only alternative is to run a stress tool in one terminal and rasdaemon or manual `edac-util` checks in another, and hope you remember to compare before and after.
 
 ## Why Parallel?
 
@@ -216,7 +216,7 @@ stressapptest receives the same total RAM as the memtester pass: `ram_per_core_m
 
 ### EDAC
 
-EDAC snapshots are taken at three points: before Phase 1 (memtester), after Phase 1, and after Phase 2 (stressapptest) or after Phase 1 if stressapptest is skipped. The intermediate snapshot (after Phase 1) is compared against the before-snapshot and the result is printed immediately — this gives the user early visibility into hardware errors before the stressapptest pass begins. For example, if EDAC detects correctable errors during Phase 1, the output shows `EDAC after Phase 1: correctable errors (CE) detected` before Phase 2 starts. The intermediate check is informational: the final pass/fail verdict always uses the before/after comparison spanning both phases, so any hardware error during either phase causes a FAIL.
+EDAC snapshots are taken at three points: before Phase 1 (memtester), after Phase 1, and after Phase 2 (stressapptest) or after Phase 1 if stressapptest is skipped. The intermediate snapshot (after Phase 1) is compared against the before-snapshot and the result is printed immediately, giving the user early visibility into hardware errors before the stressapptest pass begins. For example, if EDAC detects correctable errors during Phase 1, the output shows `EDAC after Phase 1: correctable errors (CE) detected` before Phase 2 starts. The intermediate check is informational: the final pass/fail verdict always uses the before/after comparison spanning both phases, so any hardware error during either phase causes a FAIL.
 
 ### Verdict
 
@@ -468,7 +468,7 @@ pmemtester checks Linux [EDAC](https://docs.kernel.org/driver-api/edac.html) (Er
 Nearly all major distros enable `CONFIG_EDAC=y` with hardware drivers as modules, and EDAC is available on most Linux-supported architectures (x86, ARM64, PowerPC, RISC-V, LoongArch). See [FAQ.md](FAQ.md#which-linux-distros-support-edac) for per-distro and per-architecture compatibility tables.
 
 **Known considerations:**
-- **EDAC counters are system-wide.** pmemtester compares EDAC counters before and after the test across all memory controllers, not just the memory regions being tested. Since you are always testing a subset of total RAM (e.g. default 90% of available RAM), any EDAC error that occurs during the test — whether from untested memory, other workloads, OS activity, or other NUMA nodes — will cause a FAIL. There is currently no correlation between EDAC errors and the specific memory regions under test.
+- **EDAC counters are system-wide.** pmemtester compares EDAC counters before and after the test across all memory controllers, not just the memory regions being tested. Since you are always testing a subset of total RAM (e.g. default 90% of available RAM), any EDAC error that occurs during the test (whether from untested memory, other workloads, OS activity, or other NUMA nodes) will cause a FAIL. There is currently no correlation between EDAC errors and the specific memory regions under test.
 - On ACPI/APEI systems, the GHES firmware-first driver may take priority over OS-level EDAC drivers
 - Real-time kernels and some server vendors (HPE ProLiant) recommend disabling EDAC in favor of firmware-based error reporting (iLO/iDRAC)
 - If EDAC sysfs is absent (`/sys/devices/system/edac/mc/` empty or missing), pmemtester skips EDAC checks and reports results based on memtester exit codes alone
@@ -517,9 +517,9 @@ No userspace memory stress test tool detects ECC correctable errors on its own -
 
 ### Userspace vs bare-metal testing
 
-memtester and all other userspace tools (stressapptest, stress-ng, pmemtester) run inside the operating system and test virtual addresses. The OS controls which physical RAM pages back those addresses. This means userspace tools cannot test memory occupied by the kernel, drivers, or other processes — if a bad cell happens to hold kernel data, a userspace tester will never touch it. Bare-metal tools like MemTest86 boot without an OS and have direct access to nearly all physical memory, making them the gold standard for hardware validation.
+memtester and all other userspace tools (stressapptest, stress-ng, pmemtester) run inside the operating system and test virtual addresses. The OS controls which physical RAM pages back those addresses. This means userspace tools cannot test memory occupied by the kernel, drivers, or other processes; if a bad cell happens to hold kernel data, a userspace tester will never touch it. Bare-metal tools like MemTest86 boot without an OS and have direct access to nearly all physical memory, making them the gold standard for hardware validation.
 
-However, userspace testing has a complementary strength: it runs while the full system is active (GPU, network, disk I/O), creating a hotter, electrically noisier environment that can reveal marginal RAM that passes bare-metal tests at idle. memtester also relies on `mlock` to prevent the OS from swapping test patterns to disk — if mlock fails, the test may be exercising swap rather than RAM. pmemtester validates mlock limits before starting (`check_memlock_sufficient`) and its EDAC integration catches hardware errors that userspace reads cannot see, partially compensating for the virtual address limitation.
+However, userspace testing has a complementary strength: it runs while the full system is active (GPU, network, disk I/O), creating a hotter, electrically noisier environment that can reveal marginal RAM that passes bare-metal tests at idle. memtester also relies on `mlock` to prevent the OS from swapping test patterns to disk; if mlock fails, the test may be exercising swap rather than RAM. pmemtester validates mlock limits before starting (`check_memlock_sufficient`) and its EDAC integration catches hardware errors that userspace reads cannot see, partially compensating for the virtual address limitation.
 
 References: [memtester homepage](https://pyropus.ca./software/memtester/), [MemTest86 technical overview](https://www.memtest86.com/tech_individual-test-descr.html), [Linux mlock(2) man page](https://linux.die.net/man/2/mlock).
 
@@ -529,9 +529,9 @@ Each major userspace tool takes a fundamentally different approach to finding me
 
 | Tool | Philosophy | Approach | Finds |
 |------|-----------|----------|-------|
-| **memtester** | Probe | Sequential deterministic patterns (stuck address, walking ones/zeros, bit flip, checkerboard) — probes every address methodically | Dead cells, stuck bits, coupling faults, address decoder faults |
-| **stressapptest** | Hammer | Multi-threaded randomised block copies with CRC verification — floods the memory controller with concurrent traffic | Weak signals, timing margin failures, bus contention errors, power supply instability |
-| **stress-ng** | Chaos monkey | Multi-modal stressors (galpat, rowhammer, bit flip, paging storms) — stresses the entire memory subsystem including virtual memory and cache coherency | System-level memory management bugs, page table corruption, kernel interaction failures |
+| **memtester** | Probe | Sequential deterministic patterns (stuck address, walking ones/zeros, bit flip, checkerboard): probes every address methodically | Dead cells, stuck bits, coupling faults, address decoder faults |
+| **stressapptest** | Hammer | Multi-threaded randomised block copies with CRC verification: floods the memory controller with concurrent traffic | Weak signals, timing margin failures, bus contention errors, power supply instability |
+| **stress-ng** | Chaos monkey | Multi-modal stressors (galpat, rowhammer, bit flip, paging storms): stresses the entire memory subsystem including virtual memory and cache coherency | System-level memory management bugs, page table corruption, kernel interaction failures |
 | **pmemtester** | Probe + hammer + observe | Phase 1: parallel memtester (deterministic patterns across all cores); Phase 2: stressapptest (randomised bus-contention stress); EDAC monitoring throughout | Everything memtester and stressapptest find, plus ECC correctable/uncorrectable errors invisible to all three tools above |
 
 **memtester** is single-threaded and predictable. It creates very little electrical noise, so a DIMM that is "mostly fine" but fails only when hot or when voltage drops slightly may pass. Google developed stressapptest specifically because deterministic tools were passing hardware that failed in production ([Google Open Source Blog](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html)).
@@ -540,7 +540,7 @@ Each major userspace tool takes a fundamentally different approach to finding me
 
 **stress-ng** can mimic memtester's patterns but adds OS-level chaos: forcing paging storms, exercising rowhammer patterns, and thrashing the virtual memory manager. It finds bugs where the memory subsystem interacts poorly with the kernel.
 
-**pmemtester** combines the first two approaches in sequence — deterministic pattern testing (probe) followed by randomised bus-contention stress (hammer) — while observing the hardware throughout via EDAC. No other userspace tool detects ECC correctable errors: the ECC hardware silently fixes single-bit errors before userspace reads the data, so memtester, stressapptest, and stress-ng all report PASS on memory that is actively accumulating correctable errors. pmemtester's EDAC monitoring catches these.
+**pmemtester** combines the first two approaches in sequence (deterministic pattern testing followed by randomised bus-contention stress) while observing the hardware throughout via EDAC. No other userspace tool detects ECC correctable errors: the ECC hardware silently fixes single-bit errors before userspace reads the data, so memtester, stressapptest, and stress-ng all report PASS on memory that is actively accumulating correctable errors. pmemtester's EDAC monitoring catches these.
 
 See [FAQ.md](FAQ.md#what-does-pmemtester-test-that-stressapptest-doesnt-and-vice-versa) for detailed algorithmic comparisons.
 

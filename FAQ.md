@@ -4,9 +4,9 @@
 
 pmemtester runs in two phases:
 
-1. **Phase 1 — memtester (deterministic patterns):** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels), pmemtester runs 48 instances of 4800 MB each, completing Phase 1 in ~2 hours (1 loop). A single memtester instance testing the same 225 GB would take roughly 4-10x longer, limited by memory bandwidth saturation rather than core count — see [Why does parallel memtester help?](#why-does-parallel-memtester-help) and [throughput estimates](#memtester-throughput-estimates) below. After Phase 1 finishes, EDAC counters are checked immediately and the result is printed — so you know the hardware error state before Phase 2 begins.
+1. **Phase 1: memtester (deterministic patterns).** Runs one memtester instance per physical core in parallel, dividing RAM equally. Wall-clock time scales inversely with core count up to memory bandwidth saturation (~3-5 cores on dual-channel, ~10+ cores on server platforms). On an AMD EPYC system (1 socket, 48 cores / 96 threads, 256 GB, 8 channels), pmemtester runs 48 instances of 4800 MB each, completing Phase 1 in ~2 hours (1 loop). A single memtester instance testing the same 225 GB would take roughly 4-10x longer, limited by memory bandwidth saturation rather than core count; see [Why does parallel memtester help?](#why-does-parallel-memtester-help) and [throughput estimates](#memtester-throughput-estimates) below. After Phase 1 finishes, EDAC counters are checked immediately and the result is printed, so you know the hardware error state before Phase 2 begins.
 
-2. **Phase 2 — stressapptest (randomised stress):** Runs stressapptest with the same total memory as Phase 1. The thread count is left to stressapptest's auto-detection (1 per logical CPU). By default (`--stressapptest-seconds 0`), the duration matches Phase 1's wall-clock time, so this phase takes approximately the same time. An ETA is printed at the start of Phase 2. Use `--stressapptest off` to skip this phase entirely, or `--stressapptest-seconds N` to set an explicit duration.
+2. **Phase 2: stressapptest (randomised stress).** Runs stressapptest with the same total memory as Phase 1. The thread count is left to stressapptest's auto-detection (1 per logical CPU). By default (`--stressapptest-seconds 0`), the duration matches Phase 1's wall-clock time, so this phase takes approximately the same time. An ETA is printed at the start of Phase 2. Use `--stressapptest off` to skip this phase entirely, or `--stressapptest-seconds N` to set an explicit duration.
 
 The Phase 1 memtester run determines the stressapptest duration: if memtester takes 2 hours, stressapptest also runs for 2 hours (unless overridden). Total run time approximately doubles compared to memtester alone. Status messages with wall-clock timestamps are printed at each phase boundary (start, finish with duration, intermediate EDAC result, Phase 2 ETA).
 
@@ -17,17 +17,17 @@ The Phase 1 memtester run determines the stressapptest duration: if memtester ta
 | pmemtester (default) | 48 instances + stressapptest | ~2 hours (1 loop) | ~2 hours | ~4 hours |
 | pmemtester (`--stressapptest-seconds 3600`) | 48 instances + stressapptest | ~2 hours (1 loop) | 60 min | ~3 hours |
 
-†Single-instance memtester estimate is extrapolated, not measured on this system — see [throughput estimates](#memtester-throughput-estimates) below.
+†Single-instance memtester estimate is extrapolated, not measured on this system; see [throughput estimates](#memtester-throughput-estimates) below.
 
-Example system: AMD EPYC (1 socket, 48 cores / 96 threads, 256 GB DDR5, 8 channels). pmemtester uses physical cores only (not SMT threads) — see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread).
+Example system: AMD EPYC (1 socket, 48 cores / 96 threads, 256 GB DDR5, 8 channels). pmemtester uses physical cores only (not SMT threads); see [why per-core](#why-one-memtester-per-core-instead-of-one-per-thread).
 
-Aggregate memory bandwidth saturates at ~10+ cores on an 8-channel server platform. Beyond saturation, additional threads share the same total bandwidth — throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads. No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing.
+Aggregate memory bandwidth saturates at ~10+ cores on an 8-channel server platform. Beyond saturation, additional threads share the same total bandwidth: throughput typically plateaus, and SMT threads can cause significant regression under memory-bound workloads. No published head-to-head benchmark exists on identical hardware, and memtester does not report throughput metrics, so direct comparison requires manual timing.
 
 ### memtester throughput estimates
 
 memtester runs ~2,590 buffer sweeps per loop. Each sweep reads or writes the entire buffer. The wall-clock time for a single-instance run depends on the CPU's effective single-core memory throughput for memtester's non-sequential write-read-compare access patterns.
 
-**Key constraint:** memtester's patterns (walking ones/zeros, stuck address, bit flip) are non-sequential and defeat hardware prefetchers. This means effective throughput is much lower than STREAM Copy bandwidth, which benefits heavily from prefetching. The relevant metric is single-core bandwidth with prefetchers providing minimal benefit — closer to the hardware limit imposed by Line Fill Buffer (LFB) count × cache line size × memory latency.
+**Key constraint:** memtester's patterns (walking ones/zeros, stuck address, bit flip) are non-sequential and defeat hardware prefetchers. This means effective throughput is much lower than STREAM Copy bandwidth, which benefits heavily from prefetching. The relevant metric is single-core bandwidth with prefetchers providing minimal benefit, closer to the hardware limit imposed by Line Fill Buffer (LFB) count × cache line size × memory latency.
 
 | Source | Hardware | Measurement | Effective throughput |
 |--------|----------|-------------|---------------------|
@@ -35,7 +35,7 @@ memtester runs ~2,590 buffer sweeps per loop. Each sweep reads or writes the ent
 | [memtester GitHub issue #2](https://github.com/jnavila/memtester/issues/2) | Unknown (user report) | memtester 1 GB in ~5 min | ~8.6 GB/s (inferred from 2,590 sweeps) |
 | [Chips and Cheese](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched) | EPYC 9575F (Turin, DDR5-6000, 2024) | STREAM Copy, 1 thread, prefetchers enabled | ~48 GB/s |
 
-The STREAM numbers with prefetchers enabled (~48 GB/s on Turin) represent an upper bound that memtester will not approach due to its non-sequential access patterns. The prefetchers-disabled measurement (~8 GB/s on Cascade Lake) is closer to memtester's actual behaviour but was measured on 6-year-old hardware. Modern AMD EPYC (Zen 4/5, DDR5) has more Line Fill Buffers and lower memory latency, so effective no-prefetch throughput is likely higher — but by how much is unknown without direct measurement.
+The STREAM numbers with prefetchers enabled (~48 GB/s on Turin) represent an upper bound that memtester will not approach due to its non-sequential access patterns. The prefetchers-disabled measurement (~8 GB/s on Cascade Lake) is closer to memtester's actual behaviour but was measured on 6-year-old hardware. Modern AMD EPYC (Zen 4/5, DDR5) has more Line Fill Buffers and lower memory latency, so effective no-prefetch throughput is likely higher, but by how much is unknown without direct measurement.
 
 **Extrapolated single-instance timing for 225 GB (1 loop, 2,590 sweeps):**
 
@@ -46,13 +46,13 @@ The STREAM numbers with prefetchers enabled (~48 GB/s on Turin) represent an upp
 | 15 GB/s (estimated modern EPYC, no prefetch) | 15 s | ~11 hours |
 | 20 GB/s (optimistic, partial prefetch benefit) | 11 s | ~8 hours |
 
-The 8-19 hour range in the timing table above spans the plausible throughput range from conservative (Cascade Lake-era, ~8 GB/s) to optimistic (modern EPYC with partial prefetch benefit, ~20 GB/s). The pmemtester speedup vs single-instance memtester is **4-10x** on this system: 48 parallel instances saturating the memory bus (~75-90% of peak) complete in ~2 hours regardless of where single-instance throughput falls. The exact speedup depends on how much single-core bandwidth memtester achieves on your hardware — lower single-core throughput means a larger speedup from parallelism.
+The 8-19 hour range in the timing table above spans the plausible throughput range from conservative (Cascade Lake-era, ~8 GB/s) to optimistic (modern EPYC with partial prefetch benefit, ~20 GB/s). The pmemtester speedup vs single-instance memtester is **4-10x** on this system: 48 parallel instances saturating the memory bus (~75-90% of peak) complete in ~2 hours regardless of where single-instance throughput falls. The exact speedup depends on how much single-core bandwidth memtester achieves on your hardware: lower single-core throughput means a larger speedup from parallelism.
 
 References: [McCalpin: Single-core memory bandwidth (2025)](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/), [memtester 64 GB timing estimate (GitHub issue #2)](https://github.com/jnavila/memtester/issues/2), [Chips and Cheese: AMD's Turin — 5th Gen EPYC Launched (2024)](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched).
 
 ## What does pmemtester test that stressapptest doesn't (and vice versa)?
 
-memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pass, targeting stuck bits and coupling faults with exhaustive patterns (stuck address, walking ones/zeroes, bit flip, checkerboard, etc.). Single-core throughput is limited by the CPU's L1D miss concurrency (Line Fill Buffers). STREAM benchmarks with prefetchers enabled show ~48 GB/s on a single core of AMD EPYC 9575F ([Chips and Cheese](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched)) and ~8 GB/s on Intel Xeon Cascade Lake with prefetchers disabled ([McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). However, memtester's non-sequential write-read-compare patterns defeat hardware prefetchers, so effective throughput is much closer to the no-prefetch numbers — estimated at 8-20 GB/s depending on hardware generation (see [throughput estimates](#memtester-throughput-estimates)). stressapptest uses randomized block copies with CRC verification, targeting memory bus and interface timing issues (signal integrity, timing margins). It moves more data per second but tests fewer distinct bit patterns per memory location. The tools are complementary rather than directly comparable — they detect different fault types. Additionally, pmemtester integrates EDAC error detection, which neither memtester nor stressapptest does on its own.
+memtester runs 15 pattern tests per loop with ~2,590 total buffer sweeps per pass, targeting stuck bits and coupling faults with exhaustive patterns (stuck address, walking ones/zeroes, bit flip, checkerboard, etc.). Single-core throughput is limited by the CPU's L1D miss concurrency (Line Fill Buffers). STREAM benchmarks with prefetchers enabled show ~48 GB/s on a single core of AMD EPYC 9575F ([Chips and Cheese](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched)) and ~8 GB/s on Intel Xeon Cascade Lake with prefetchers disabled ([McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). However, memtester's non-sequential write-read-compare patterns defeat hardware prefetchers, so effective throughput is much closer to the no-prefetch numbers, estimated at 8-20 GB/s depending on hardware generation (see [throughput estimates](#memtester-throughput-estimates)). stressapptest uses randomized block copies with CRC verification, targeting memory bus and interface timing issues (signal integrity, timing margins). It moves more data per second but tests fewer distinct bit patterns per memory location. The tools are complementary rather than directly comparable; they detect different fault types. Additionally, pmemtester integrates EDAC error detection, which neither memtester nor stressapptest does on its own.
 
 | **pmemtester** | Phase 1 (parallel memtester) | Phase 2 (stressapptest) |
 |---|---|---|
@@ -100,7 +100,7 @@ The threads race against each other, forcing the memory controller to rapidly sw
 
 **Strength**: Maximises bus contention. Reveals electrically weak RAM that passes pattern-based tests. Widely considered the best userspace tool for DDR4/DDR5 intermittent stability errors.
 
-**Weakness**: Statistical coverage per location — does not verify every bit pattern at every address. May miss hard faults that require specific patterns to detect.
+**Weakness**: Statistical coverage per location; does not verify every bit pattern at every address. May miss hard faults that require specific patterns to detect.
 
 ### stress-ng: multi-modal OS stressor ("chaos monkey")
 
@@ -119,11 +119,11 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 
 | Scenario | memtester | stressapptest | stress-ng | pmemtester |
 |----------|-----------|---------------|-----------|------------|
-| **Dead capacitor (hard fault)** | Excellent — identifies the exact address | Good — may miss if random patterns don't hit the cell | Good — depends on stressor used | Excellent — memtester patterns identify the address + EDAC confirms hardware error |
-| **Overheating RAM** | Poor — generates very little heat or bus load | Excellent — saturates bandwidth, stresses thermal envelope | Very good — significant heat under multi-worker load | Excellent — parallel memtester sustains load, stressapptest second pass saturates bandwidth, EDAC detects thermally-triggered ECC errors |
-| **Bad memory controller** | Poor — sequential single-threaded load is too light | Excellent — this is its primary design goal | Good — high concurrent load stresses controller | Excellent — parallel memtester + stressapptest randomised stress both flood the controller, EDAC catches controller-induced ECC errors |
-| **Power supply / VRM instability** | Poor — low current draw | Excellent — large current transients reveal weak PSUs | Good — high sustained load | Excellent — parallel memtester + stressapptest draw the same current as stressapptest alone, EDAC catches power-induced bit flips that ECC corrects silently |
-| **Rowhammer vulnerability** | No | No | Yes — has specific rowhammer stressors | No (neither memtester nor stressapptest target rowhammer) |
+| **Dead capacitor (hard fault)** | Excellent: identifies the exact address | Good: may miss if random patterns don't hit the cell | Good: depends on stressor used | Excellent: memtester patterns identify the address + EDAC confirms hardware error |
+| **Overheating RAM** | Poor: generates very little heat or bus load | Excellent: saturates bandwidth, stresses thermal envelope | Very good: significant heat under multi-worker load | Excellent: parallel memtester sustains load, stressapptest second pass saturates bandwidth, EDAC detects thermally-triggered ECC errors |
+| **Bad memory controller** | Poor: sequential single-threaded load is too light | Excellent: this is its primary design goal | Good: high concurrent load stresses controller | Excellent: parallel memtester + stressapptest randomised stress both flood the controller, EDAC catches controller-induced ECC errors |
+| **Power supply / VRM instability** | Poor: low current draw | Excellent: large current transients reveal weak PSUs | Good: high sustained load | Excellent: parallel memtester + stressapptest draw the same current as stressapptest alone, EDAC catches power-induced bit flips that ECC corrects silently |
+| **Rowhammer vulnerability** | No | No | Yes: has specific rowhammer stressors | No (neither memtester nor stressapptest target rowhammer) |
 
 ### Feature comparison
 
@@ -131,8 +131,8 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 |---------|-----------|---------------|-----------|------------|
 | Concurrency | Single-threaded | 1 per logical CPU (auto) | Massively parallel (N workers) | 1 memtester per physical core |
 | Memory locking | `mlock` (may fail silently) | `mlock` on large allocations | `mlock`, `mmap`, `memfd`, etc. | `mlock` with pre-validation (`check_memlock_sufficient`) |
-| DMA / bus stress | None — pure CPU-to-RAM | High — disk/network threads stress the bus | Variable — can stress I/O and RAM simultaneously | High — stressapptest second pass (by default) adds bus stress |
-| ECC/EDAC detection | No | No | No | Yes — EDAC counter comparison (before/between/after phases) |
+| DMA / bus stress | None: pure CPU-to-RAM | High: disk/network threads stress the bus | Variable: can stress I/O and RAM simultaneously | High: stressapptest second pass (by default) adds bus stress |
+| ECC/EDAC detection | No | No | No | Yes: EDAC counter comparison (before/between/after phases) |
 | Pattern depth per location | ~2,590 sweeps/loop | Statistical (CRC-verified) | Configurable | Phase 1: ~2,590 sweeps/loop; Phase 2: statistical (CRC-verified) |
 | Bus saturation | ~15-25% of peak ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/)) | ~75-85% of peak | Variable | Phase 1: ~75-90% of peak ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/)); Phase 2: ~75-85% |
 | Verification | Immediate after each write | Asynchronous CRC checksum | Immediate or checksum | Phase 1: immediate after each write; Phase 2: asynchronous CRC |
@@ -140,14 +140,14 @@ A configurable multi-modal stressor. Its `--vm` methods can mimic memtester patt
 
 ### Where pmemtester fits
 
-pmemtester wraps memtester's thorough 15-pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC hardware error monitoring (detecting errors invisible to all three tools). By default, pmemtester runs a stressapptest second pass after memtester completes (`auto` mode: runs when the binary is present, skips otherwise), combining both testing approaches in a single tool. It is "probe + hammer + observe" — deterministic patterns at near-peak memory bandwidth, randomised stress testing, plus hardware error detection down to single-bit ECC corrections.
+pmemtester wraps memtester's thorough 15-pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC hardware error monitoring (detecting errors invisible to all three tools). By default, pmemtester runs a stressapptest second pass after memtester completes (`auto` mode: runs when the binary is present, skips otherwise), combining both testing approaches in a single tool. It is "probe + hammer + observe": deterministic patterns at near-peak memory bandwidth, randomised stress testing, plus hardware error detection down to single-bit ECC corrections.
 
 References: [memtester source: tests.c](https://github.com/jnavila/memtester/blob/master/tests.c), [stressapptest source](https://github.com/stressapptest/stressapptest), [Google: Fighting Bad Memories](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html), [stress-ng vm stressors](https://wiki.ubuntu.com/Kernel/Reference/stress-ng), [stress-ng source: stress-vm.c](https://github.com/ColinIanKing/stress-ng/blob/master/stress-vm.c), [Kim et al., "Flipping Bits in Memory Without Accessing Them" (ISCA 2014, rowhammer)](https://users.ece.cmu.edu/~yoMDL/papers/kim-isca14.pdf).
 
 ## Which tool should I use?
 
 **Diagnosing a suspected bad DIMM (random crashes, BSODs, kernel panics):**
-Boot into [Memtest86+](https://www.memtest.org/) from USB. Bare-metal testing has direct physical memory access and is the gold standard for hardware validation. No userspace tool can fully substitute because the OS reserves memory that userspace cannot test. If you must stay in the OS, use memtester (or pmemtester for parallelism + EDAC) — it is the most methodical at verifying individual cells.
+Boot into [Memtest86+](https://www.memtest.org/) from USB. Bare-metal testing has direct physical memory access and is the gold standard for hardware validation. No userspace tool can fully substitute because the OS reserves memory that userspace cannot test. If you must stay in the OS, use memtester (or pmemtester for parallelism + EDAC); it is the most methodical at verifying individual cells.
 
 **Validating overclocking, new RAM timings, or cooling:**
 Use pmemtester. It runs memtester's 15-pattern cell testing followed by a stressapptest pass for bus-contention and thermal stress, with EDAC monitoring throughout. A single `./pmemtester --stressapptest-seconds 3600` covers both pattern validation and stability testing. Standalone stressapptest is no longer the recommended approach since pmemtester includes it as Phase 2, adds EDAC error detection (invisible to stressapptest alone), and tests each cell deterministically first.
@@ -156,7 +156,7 @@ Use pmemtester. It runs memtester's 15-pattern cell testing followed by a stress
 Use pmemtester. It combines memtester's thorough cell-level testing with parallel bandwidth saturation, an optional stressapptest second pass for bus-contention stress testing, and EDAC monitoring. The `--allow-ce` flag lets you distinguish between correctable errors (monitor and track) and uncorrectable errors (fail immediately). By default (`--stressapptest auto`), pmemtester runs stressapptest automatically after memtester if the binary is found, using the same duration and total memory as the memtester pass.
 
 **Kernel development, OOM testing, swap stability:**
-Use stress-ng. It stresses the entire virtual memory stack — OOM killer behaviour, swap partition stability, page table management, cache coherency. Its rowhammer stressors are also the only userspace way to test DRAM disturbance error susceptibility.
+Use stress-ng. It stresses the entire virtual memory stack: OOM killer behaviour, swap partition stability, page table management, cache coherency. Its rowhammer stressors are also the only userspace way to test DRAM disturbance error susceptibility.
 
 **Fleet-scale memory health monitoring (datacentres):**
 Use rasdaemon for continuous EDAC monitoring, with periodic pmemtester runs during maintenance windows. pmemtester's CE/UE classification and `--allow-ce` flag align with modern vendor guidance (see [CE thresholds](#how-many-correctable-errors-before-replacing-a-dimm)) that distinguishes correctable from uncorrectable errors rather than treating all EDAC events as failures.
@@ -217,7 +217,7 @@ References: [Schroeder et al., "DRAM Errors in the Wild" (2009)](https://cacm.ac
 
 ## Why does parallel memtester help?
 
-A single memtester thread cannot saturate a modern memory bus. Even for sequential STREAM workloads, one thread achieves only 15-25% of peak memory bandwidth on a server CPU ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/), [McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). memtester's non-sequential patterns defeat hardware prefetchers, so it achieves even less — estimated at ~8-20 GB/s effective on current hardware (see [throughput estimates](#memtester-throughput-estimates)), well below the ~48 GB/s a single core can achieve with prefetching on AMD EPYC Turin ([Chips and Cheese](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched)). Running multiple instances in parallel fills more memory channels simultaneously. Aggregate throughput with ~10 threads reaches 75-90% of peak bandwidth on current x86 hardware ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/), [Hager 2018](https://blogs.fau.de/hager/archives/8263)) — roughly a **4-7x speedup** over a single thread on one socket, with exact speedup depending on how much single-core bandwidth memtester achieves on your hardware.
+A single memtester thread cannot saturate a modern memory bus. Even for sequential STREAM workloads, one thread achieves only 15-25% of peak memory bandwidth on a server CPU ([Rupp 2015](https://www.karlrupp.net/2015/02/stream-benchmark-results-on-intel-xeon-and-xeon-phi/), [McCalpin 2025](https://sites.utexas.edu/jdm4372/2025/02/17/single-core-memory-bandwidth-latency-bandwidth-and-concurrency/)). memtester's non-sequential patterns defeat hardware prefetchers, so it achieves even less, estimated at ~8-20 GB/s effective on current hardware (see [throughput estimates](#memtester-throughput-estimates)), well below the ~48 GB/s a single core can achieve with prefetching on AMD EPYC Turin ([Chips and Cheese](https://chipsandcheese.com/p/amds-turin-5th-gen-epyc-launched)). Running multiple instances in parallel fills more memory channels simultaneously. Aggregate throughput with ~10 threads reaches 75-90% of peak bandwidth on current x86 hardware ([McCalpin 2023](https://sites.utexas.edu/jdm4372/2023/04/25/the-evolution-of-single-core-bandwidth-in-multicore-processors/), [Hager 2018](https://blogs.fau.de/hager/archives/8263)), roughly a **4-7x speedup** over a single thread on one socket, with exact speedup depending on how much single-core bandwidth memtester achieves on your hardware.
 
 On multi-socket systems, pmemtester's per-core parallelism also keeps memory accesses NUMA-local. A single memtester process testing both sockets would pay a cross-socket bandwidth penalty (see below), while pmemtester's many independent instances naturally access memory local to the core they run on.
 
@@ -350,18 +350,18 @@ The `EDAC_GHES` firmware-first driver (ACPI/APEI) works on any architecture with
 
 ## How do standalone boot tools (MemTest86, Memtest86+) detect ECC errors?
 
-Standalone boot tools run at the highest CPU privilege level (Ring 0 on x86, EL1/EL2 on ARM64, PLV0 on LoongArch) and poll hardware registers directly — no OS or EDAC driver is involved.
+Standalone boot tools run at the highest CPU privilege level (Ring 0 on x86, EL1/EL2 on ARM64, PLV0 on LoongArch) and poll hardware registers directly; no OS or EDAC driver is involved.
 
 ### MemTest86 (PassMark)
 
 MemTest86 uses four different register access mechanisms depending on the chipset:
 
-1. **MCA (Machine Check Architecture) MSRs** — reads MCi_STATUS, MCi_ADDR, and MCi_MISC registers via `rdmsr`. Bit 61 (UC) of MCi_STATUS distinguishes correctable from uncorrectable errors.
-2. **IMC PCI registers** — chipset-specific Integrated Memory Controller registers that record DRAM address details (rank, bank, row, column).
-3. **Sideband registers** — used on Intel Atom SoCs via an internal bus.
-4. **AMD SMN (System Management Network)** — used on AMD Ryzen/EPYC to access Unified Memory Controller ECC registers.
+1. **MCA (Machine Check Architecture) MSRs**: reads MCi_STATUS, MCi_ADDR, and MCi_MISC registers via `rdmsr`. Bit 61 (UC) of MCi_STATUS distinguishes correctable from uncorrectable errors.
+2. **IMC PCI registers**: chipset-specific Integrated Memory Controller registers that record DRAM address details (rank, bank, row, column).
+3. **Sideband registers**: used on Intel Atom SoCs via an internal bus.
+4. **AMD SMN (System Management Network)**: used on AMD Ryzen/EPYC to access Unified Memory Controller ECC registers.
 
-Each chipset family requires specific polling code. PassMark has added support incrementally across dozens of Intel and AMD chipsets (Sandy Bridge through Arrow Lake/Lunar Lake; AMD FX through Zen 5). **ARM64 has no ECC support** — PassMark stated they have not seen ARM platforms with ECC RAM for testing.
+Each chipset family requires specific polling code. PassMark has added support incrementally across dozens of Intel and AMD chipsets (Sandy Bridge through Arrow Lake/Lunar Lake; AMD FX through Zen 5). **ARM64 has no ECC support**: PassMark stated they have not seen ARM platforms with ECC RAM for testing.
 
 **Free vs Pro edition:**
 
@@ -380,13 +380,13 @@ Memtest86+ polls AMD UMC (Unified Memory Controller) MCA MSR banks and AMD SMN r
 
 **Current limitations:**
 
-- **AMD Ryzen only.** Supported families: Zen (Family 17h), Zen 3 Vermeer, Zen 3+ Rembrandt, Zen 4 Raphael, Zen 5 Granite Ridge. There is zero Intel ECC polling code in the codebase — the Intel IMC files handle memory timings only.
-- **Disabled by default.** `enable_ecc_polling` is `false` in `app/config.c` and there is no command-line flag to enable it — you must edit the source and recompile. [PR #566](https://github.com/memtest86plus/memtest86plus/pull/566) (open, not yet merged) would add a runtime toggle.
+- **AMD Ryzen only.** Supported families: Zen (Family 17h), Zen 3 Vermeer, Zen 3+ Rembrandt, Zen 4 Raphael, Zen 5 Granite Ridge. There is zero Intel ECC polling code in the codebase; the Intel IMC files handle memory timings only.
+- **Disabled by default.** `enable_ecc_polling` is `false` in `app/config.c` and there is no command-line flag to enable it; you must edit the source and recompile. [PR #566](https://github.com/memtest86plus/memtest86plus/pull/566) (open, not yet merged) would add a runtime toggle.
 - **No LoongArch or other architecture ECC support.**
 
 ### How hardware distinguishes CE from UE
 
-The memory controller's SECDED (Single Error Correct, Double Error Detect) logic generates a syndrome when reading ECC-protected data. A non-zero syndrome that maps to a single correctable bit triggers a CE flag; a syndrome indicating an error beyond correction capability triggers a UE flag. The standalone tools simply read these hardware-populated status bits — they do not implement ECC decoding themselves.
+The memory controller's SECDED (Single Error Correct, Double Error Detect) logic generates a syndrome when reading ECC-protected data. A non-zero syndrome that maps to a single correctable bit triggers a CE flag; a syndrome indicating an error beyond correction capability triggers a UE flag. The standalone tools simply read these hardware-populated status bits; they do not implement ECC decoding themselves.
 
 References: [MemTest86 ECC technical details](https://www.memtest86.com/ecc.htm), [MemTest86 edition comparison](https://www.memtest86.com/compare.html), [Memtest86+ GitHub: ECC discussion #92](https://github.com/memtest86plus/memtest86plus/discussions/92), [Memtest86+ GitHub: enabling ECC in v7 discussion #436](https://github.com/memtest86plus/memtest86plus/discussions/436), [Memtest86+ GitHub: ECC polling option PR #566](https://github.com/memtest86plus/memtest86plus/pull/566).
 
@@ -408,7 +408,7 @@ This tells you which logical cores and memory belong to each NUMA node (typicall
 
 ### 2. Move processes off the target socket
 
-Use `taskset` to change CPU affinity for running user processes. Moving kernel threads is restricted and generally unnecessary — focus on user-space processes.
+Use `taskset` to change CPU affinity for running user processes. Moving kernel threads is restricted and generally unnecessary; focus on user-space processes.
 
 ```bash
 # Move all user processes from socket 0 (cores 0-15) to socket 1 (cores 16-31)
@@ -484,9 +484,9 @@ The CPU classifies uncorrectable errors into three categories (Intel terminology
 
 | Type | Meaning | Signal | Severity |
 |------|---------|--------|----------|
-| **SRAR** (Action Required) | CPU consumed or is about to consume corrupted data | Machine Check Exception (#MC) | Highest — recovery mandatory before execution can resume |
-| **SRAO** (Action Optional) | Corruption detected but not consumed (e.g., patrol scrub) | #MC or CMCI | Medium — processor state is valid, page can be retired proactively |
-| **UCNA** (No Action) | Corruption detected in background, not consumed | CMCI (not #MC) | Lowest — informational, page can be poisoned preventively |
+| **SRAR** (Action Required) | CPU consumed or is about to consume corrupted data | Machine Check Exception (#MC) | Highest: recovery mandatory before execution can resume |
+| **SRAO** (Action Optional) | Corruption detected but not consumed (e.g., patrol scrub) | #MC or CMCI | Medium: processor state is valid, page can be retired proactively |
+| **UCNA** (No Action) | Corruption detected in background, not consumed | CMCI (not #MC) | Lowest: informational, page can be poisoned preventively |
 
 The distinction matters because a patrol scrub UE (SRAO/UCNA) is detected *before* any process reads the bad data, giving the kernel a chance to retire the page transparently. A consumed UE (SRAR) means a process already has or is about to use corrupted data.
 
@@ -494,18 +494,18 @@ The distinction matters because a patrol scrub UE (SRAO/UCNA) is detected *befor
 
 When the MCE handler runs, it classifies the error via `mce_severity()` and routes to one of these outcomes:
 
-**Kernel panic** — when any of these are true:
-- Processor Context Corrupt (PCC) bit is set in MCA status — the CPU's own state is unreliable
-- No Restart IP available while in kernel mode — the kernel cannot resume
-- `CONFIG_MEMORY_FAILURE` is not enabled — the kernel has no recovery mechanism
+**Kernel panic** when any of these are true:
+- Processor Context Corrupt (PCC) bit is set in MCA status: the CPU's own state is unreliable
+- No Restart IP available while in kernel mode: the kernel cannot resume
+- `CONFIG_MEMORY_FAILURE` is not enabled: the kernel has no recovery mechanism
 - The corrupted page belongs to a kernel slab object, page table, or other internal data structure that cannot be recovered
 
-**Page poisoned and retired** — when `CONFIG_MEMORY_FAILURE` is enabled (all major distros enable this by default) and the page type is recoverable. The kernel:
+**Page poisoned and retired** when `CONFIG_MEMORY_FAILURE` is enabled (all major distros enable this by default) and the page type is recoverable. The kernel:
 1. Sets the `PG_hwpoison` flag on the page, permanently excluding it from future allocation
 2. Unmaps the page from all processes that had it mapped
 3. Executes a page-type-specific handler (see recovery table below)
 
-**Process signalled** — affected processes receive `SIGBUS`:
+**Process signalled**: affected processes receive `SIGBUS`:
 - `BUS_MCEERR_AR` (Action Required): synchronous, delivered to the thread that consumed the corrupted data. Means "you used bad data, handle this now or die."
 - `BUS_MCEERR_AO` (Action Optional): asynchronous, delivered to processes that have the page mapped but haven't consumed it yet. Only sent to processes that opted into early notification via `prctl(PR_MCE_KILL_EARLY)` or the `vm.memory_failure_early_kill` sysctl.
 
@@ -514,18 +514,18 @@ When the MCE handler runs, it classifies the error via `mce_severity()` and rout
 | Page type | What happens | Data lost? |
 |-----------|-------------|------------|
 | **Clean file-backed** (page cache) | Kernel drops the page and re-reads from disk on next access | No |
-| **Dirty file-backed** (page cache) | Page truncated; `fsync()`/`write()` returns `-EIO` to notify application | Yes — unflushed writes are lost |
-| **Anonymous** (heap, stack) | Page unmapped; process gets SIGBUS on next access (or immediately if early-kill) | Yes — no backing store |
+| **Dirty file-backed** (page cache) | Page truncated; `fsync()`/`write()` returns `-EIO` to notify application | Yes: unflushed writes are lost |
+| **Anonymous** (heap, stack) | Page unmapped; process gets SIGBUS on next access (or immediately if early-kill) | Yes: no backing store |
 | **Clean swap cache** | Removed from swap cache; swap slot still has valid data | No |
 | **Dirty swap cache** | Dirty bit cleared; process killed lazily on swap-in | Yes |
 | **HugeTLB** | Entire huge page unmapped from all processes | Yes (for mapped data) |
 | **THP** (Transparent Huge Page) | Split to 4K pages first, then only the poisoned page is retired | Only the affected 4K region |
 | **KSM** (merged page) | All processes sharing the merged page are signalled; page unmerged | Yes |
-| **Kernel internal** (slab, page tables) | Not recoverable — kernel panic | N/A |
+| **Kernel internal** (slab, page tables) | Not recoverable: kernel panic | N/A |
 
 ### Patrol scrub vs consumed errors
 
-Patrol scrub (background memory scrubbing by the memory controller) can detect UEs proactively — before any process reads the bad data. These are reported as SRAO or UCNA, and the kernel can poison the page and unmap it transparently. No process needs to be killed if the page is a clean file-backed page or if no process has accessed it yet. This is the best-case scenario for a UE.
+Patrol scrub (background memory scrubbing by the memory controller) can detect UEs proactively, before any process reads the bad data. These are reported as SRAO or UCNA, and the kernel can poison the page and unmap it transparently. No process needs to be killed if the page is a clean file-backed page or if no process has accessed it yet. This is the best-case scenario for a UE.
 
 A consumed UE (SRAR) means a process already tried to use the corrupted data. The kernel must signal the process immediately. For anonymous pages (heap/stack), the data is unrecoverable and the process must handle SIGBUS or be killed.
 
@@ -533,12 +533,12 @@ A consumed UE (SRAR) means a process already tried to use the corrupted data. Th
 
 The kernel supports two policies for notifying processes about poisoned pages they have mapped but haven't consumed yet:
 
-- **Late kill** (default): No signal until the process actually accesses the poisoned page. At that point it gets `BUS_MCEERR_AR`. This minimises unnecessary process kills — the process may never touch that page again.
+- **Late kill** (default): No signal until the process actually accesses the poisoned page. At that point it gets `BUS_MCEERR_AR`. This minimises unnecessary process kills; the process may never touch that page again.
 - **Early kill**: `BUS_MCEERR_AO` is sent immediately to all processes mapping the page. Enable per-process with `prctl(PR_MCE_KILL_EARLY)` or system-wide with `sysctl vm.memory_failure_early_kill=1`.
 
 ### Can applications survive a UE?
 
-In theory, yes — a process can install a `SIGBUS` handler and use `siglongjmp()` to recover. In practice, almost no applications do this. The one major exception is **QEMU/KVM**, which intercepts `BUS_MCEERR_AR`/`BUS_MCEERR_AO` and injects a virtual MCE into the guest VM, letting the guest OS handle the error. No major database (PostgreSQL, MySQL, Oracle) or JVM implements MCE-aware SIGBUS recovery — a hardware UE in their memory crashes the process.
+In theory, yes: a process can install a `SIGBUS` handler and use `siglongjmp()` to recover. In practice, almost no applications do this. The one major exception is **QEMU/KVM**, which intercepts `BUS_MCEERR_AR`/`BUS_MCEERR_AO` and injects a virtual MCE into the guest VM, letting the guest OS handle the error. No major database (PostgreSQL, MySQL, Oracle) or JVM implements MCE-aware SIGBUS recovery; a hardware UE in their memory crashes the process.
 
 ### The tolerant sysctl
 
@@ -549,7 +549,7 @@ The `tolerant` sysctl (`/sys/devices/system/edac/mc/mc*/tolerant` or the x86 MCE
 | 0 | Always panic on any uncorrected error |
 | 1 | Attempt recovery; panic if not possible (default) |
 | 2 | Log and continue when possible (permissive) |
-| 3 | Never panic, log only (dangerous — risks silent corruption) |
+| 3 | Never panic, log only (dangerous: risks silent corruption) |
 
 ### Monitoring tools
 
@@ -557,13 +557,13 @@ The `tolerant` sysctl (`/sys/devices/system/edac/mc/mc*/tolerant` or the x86 MCE
 
 ### What this means for pmemtester
 
-pmemtester monitors EDAC counters (`/sys/devices/system/edac/mc/`) before, between, and after test phases — reporting intermediate results immediately after the memtester phase completes. If a UE occurs during a pmemtester run:
+pmemtester monitors EDAC counters (`/sys/devices/system/edac/mc/`) before, between, and after test phases, reporting intermediate results immediately after the memtester phase completes. If a UE occurs during a pmemtester run:
 
 1. The kernel's MCE handler fires and may kill one or more memtester processes (SRAR) or poison the page proactively (SRAO/UCNA)
 2. pmemtester detects the killed process via its non-zero exit code
 3. pmemtester's EDAC after-snapshot shows increased UE counters compared to the before-snapshot
 4. Both signals contribute to a FAIL verdict
 
-The EDAC check catches errors that memtester's own exit code might miss — for example, if a UE occurs in memory not currently under test, or if a patrol scrub detects a UE that was poisoned and retired without killing any memtester process.
+The EDAC check catches errors that memtester's own exit code might miss: for example, if a UE occurs in memory not currently under test, or if a patrol scrub detects a UE that was poisoned and retired without killing any memtester process.
 
 References: [HWPoison kernel documentation](https://docs.kernel.org/mm/hwpoison.html), [HWPOISON (LWN.net, Andi Kleen, 2009)](https://lwn.net/Articles/348886/), [Machine check recovery when kernel accesses poison (LWN.net, 2015)](https://lwn.net/Articles/671301/), [mm/memory-failure.c (kernel source)](https://github.com/torvalds/linux/blob/master/mm/memory-failure.c), [arch/x86/kernel/cpu/mce/core.c (kernel source)](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/mce/core.c), [rasdaemon repository](https://github.com/mchehab/rasdaemon).
