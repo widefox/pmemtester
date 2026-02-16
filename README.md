@@ -19,18 +19,72 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester, stressapptest, and EDAC results
 
+## Installation
+
+### Dependencies
+
+- **memtester** (required) — [pyropus.ca/software/memtester](https://pyropus.ca./software/memtester/)
+- **stressapptest** (optional — auto mode silently skips if absent) — Homepage & source: [github.com/stressapptest/stressapptest](https://github.com/stressapptest/stressapptest)
+- Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
+- `lscpu` (from util-linux; falls back to `nproc` from coreutils)
+- EDAC support (optional — gracefully skipped if absent)
+
+Install dependencies from your distribution's package manager or build from source:
+
+```bash
+# Debian / Ubuntu
+apt install memtester stressapptest
+
+# Fedora
+dnf install memtester stressapptest
+
+# Arch Linux
+pacman -S community/memtester stressapptest
+
+# Or build from source
+# memtester: https://pyropus.ca./software/memtester/
+# stressapptest: https://github.com/stressapptest/stressapptest
+```
+
+### Install pmemtester
+
+```bash
+make install           # Install to /usr/local/bin (requires sudo)
+make install PREFIX=/opt/pmemtester   # Custom prefix
+make uninstall         # Remove installed files
+make dist              # Create .tgz distribution archive
+```
+
+### Distro packaging
+
+On distributions that package memtester or stressapptest to `/usr/bin`, pass the directory at install time to change the default:
+
+```bash
+make install MEMTESTER_DIR=/usr/bin
+make install STRESSAPPTEST_DIR=/usr/bin
+make install MEMTESTER_DIR=/usr/bin STRESSAPPTEST_DIR=/usr/bin   # both
+```
+
+This patches the defaults so `pmemtester --help` shows the correct paths and binaries are found without needing `--memtester-dir` or `--stressapptest-dir`. The runtime flags still override at runtime.
+
+Distributions that package memtester (all install to `/usr/bin/memtester`):
+
+- Fedora
+- Debian / Ubuntu
+- Arch Linux
+- openSUSE
+- Gentoo
+- Alpine Linux
+
+pmemtester looks for `memtester` in `/usr/local/bin` by default. Override at runtime with `--memtester-dir DIR`, or patch the default at install time with `make install MEMTESTER_DIR=/usr/bin` (see above). Same for stressapptest with `--stressapptest-dir DIR` and `make install STRESSAPPTEST_DIR=/usr/bin`.
+
+### Test dependencies
+
+- bats 1.13.0+, kcov 38+ (v35 cannot trace `source`d files in bats; build from [source](https://github.com/SimonKagstrom/kcov) if needed), shellcheck 0.10.0+
+
 ## Quick Start
 
 ```bash
-# Install memtester first (not bundled)
-# e.g., apt install memtester  OR  build from source
-
-# Install stressapptest (optional, not bundled)
-# e.g., apt install stressapptest  OR  build from source
-
-# Install pmemtester
-sudo make install
-
 # Run with safe defaults (90% available RAM, 1 iteration)
 sudo pmemtester
 
@@ -406,45 +460,6 @@ make lint              # Run shellcheck
 ```
 
 Test infrastructure: [bats-core](https://github.com/bats-core/bats-core) 1.13.0 with bats-support/bats-assert. Coverage via [kcov](https://simonkagstrom.github.io/kcov/) v38+ (older versions cannot instrument bash `source`d files inside bats subshells; if your distro ships an older version such as Fedora's v35, build from [source](https://github.com/SimonKagstrom/kcov)).
-
-## Installation
-
-```bash
-make install           # Install to /usr/local/bin (requires sudo)
-make install PREFIX=/opt/pmemtester   # Custom prefix
-make uninstall         # Remove installed files
-make dist              # Create .tgz distribution archive
-```
-
-### Distro packaging
-
-On distributions that package memtester or stressapptest to `/usr/bin`, pass the directory at install time to change the default:
-
-```bash
-make install MEMTESTER_DIR=/usr/bin
-make install STRESSAPPTEST_DIR=/usr/bin
-make install MEMTESTER_DIR=/usr/bin STRESSAPPTEST_DIR=/usr/bin   # both
-```
-
-This patches the defaults so `pmemtester --help` shows the correct paths and binaries are found without needing `--memtester-dir` or `--stressapptest-dir`. The runtime flags still override at runtime.
-
-Distributions that package memtester (all install to `/usr/bin/memtester`):
-
-- Fedora
-- Debian / Ubuntu
-- Arch Linux
-- openSUSE
-- Gentoo
-- Alpine Linux
-
-## Requirements
-
-- **memtester** binary (not bundled) -- [pyropus.ca](https://pyropus.ca./software/memtester/). pmemtester looks for `memtester` in `/usr/local/bin` by default. Override at runtime with `--memtester-dir DIR`, or patch the default at install time with `make install MEMTESTER_DIR=/usr/bin` (see [Distro packaging](#distro-packaging)).
-- **stressapptest** binary (optional -- auto mode reports and skips if absent) -- [github.com/stressapptest](https://github.com/stressapptest/stressapptest). pmemtester looks for `stressapptest` in `/usr/local/bin` by default. Override at runtime with `--stressapptest-dir DIR`, or patch the default at install time with `make install STRESSAPPTEST_DIR=/usr/bin`.
-- Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
-- `lscpu` (from util-linux; falls back to `nproc` from coreutils)
-- EDAC support (optional -- gracefully skipped if absent)
-- For testing: bats 1.13.0+, kcov 38+ (v35 cannot trace `source`d files in bats; build from [source](https://github.com/SimonKagstrom/kcov) if needed), shellcheck 0.10.0+
 
 ## EDAC Compatibility
 
