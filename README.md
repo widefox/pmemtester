@@ -9,7 +9,7 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/), and
 ## Features
 
 - Runs one memtester instance per CPU core to saturate the memory bus on any system
-- Optional stressapptest second pass for randomised bus-contention stress testing
+- stressapptest second pass (by default) for randomised bus-contention stress testing
 - Configurable RAM percentage (default 90% of available)
 - RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
@@ -109,7 +109,7 @@ This binds both the CPU threads and memory allocation to the specified NUMA node
 
 ## stressapptest Second Pass
 
-pmemtester optionally runs [stressapptest](https://github.com/stressapptest/stressapptest) as a second pass after memtester completes. This combines memtester's deterministic pattern testing (finds stuck bits and coupling faults) with stressapptest's randomised bus-contention stress testing (finds timing margin failures and electrically weak RAM). See [Testing philosophy](#testing-philosophy-microscope-hammer-chaos-monkey) for why both approaches are complementary.
+By default pmemtester runs [stressapptest](https://github.com/stressapptest/stressapptest) as a second pass after the memtester phase completes. This combines memtester's deterministic pattern testing (finds stuck bits and coupling faults) with stressapptest's randomised bus-contention stress testing (finds timing margin failures and electrically weak RAM). See [Testing philosophy](#testing-philosophy-microscope-hammer-chaos-monkey) for why both approaches are complementary.
 
 ### Modes
 
@@ -188,6 +188,9 @@ test/
 │   ├── proc_meminfo_no_available
 │   ├── edac_counters_zero/
 │   ├── edac_counters_nonzero/
+│   ├── edac_counters_ce_only/
+│   ├── edac_counters_ue_only/
+│   ├── edac_counters_ce_and_ue/
 │   ├── edac_messages_clean.txt
 │   └── edac_messages_errors.txt
 └── test_helper/
@@ -440,7 +443,7 @@ However, userspace testing has a complementary strength: it runs while the full 
 
 References: [memtester homepage](https://pyropus.ca./software/memtester/), [MemTest86 technical overview](https://www.memtest86.com/tech_individual-test-descr.html), [Linux mlock(2) man page](https://linux.die.net/man/2/mlock).
 
-### Testing philosophy: microscope, hammer, chaos monkey
+### Testing philosophy: microscope, hammer, chaos monkey, microscope + hammer + listen
 
 Each major userspace tool takes a fundamentally different approach to finding memory problems:
 
@@ -449,6 +452,7 @@ Each major userspace tool takes a fundamentally different approach to finding me
 | **memtester** | Microscope | Sequential deterministic patterns (stuck address, walking ones/zeros, bit flip, checkerboard) — checks every address methodically | Dead cells, stuck bits, coupling faults, address decoder faults |
 | **stressapptest** | Hammer | Multi-threaded randomised block copies with CRC verification — floods the memory controller with concurrent traffic | Weak signals, timing margin failures, bus contention errors, power supply instability |
 | **stress-ng** | Chaos monkey | Multi-modal stressors (galpat, rowhammer, bit flip, paging storms) — stresses the entire memory subsystem including virtual memory and cache coherency | System-level memory management bugs, page table corruption, kernel interaction failures |
+| **pmemtester** | Microscope + hammer + listen | Phase 1: parallel memtester (deterministic patterns across all cores); Phase 2: stressapptest (randomised bus-contention stress); EDAC monitoring throughout | Everything memtester and stressapptest find, plus ECC correctable/uncorrectable errors invisible to all three tools above |
 
 **memtester** is single-threaded and predictable. It creates very little electrical noise, so a DIMM that is "mostly fine" but fails only when hot or when voltage drops slightly may pass. Google developed stressapptest specifically because deterministic tools were passing hardware that failed in production ([Google Open Source Blog](https://opensource.googleblog.com/2009/10/fighting-bad-memories-stressful.html)).
 
@@ -456,7 +460,7 @@ Each major userspace tool takes a fundamentally different approach to finding me
 
 **stress-ng** can mimic memtester's patterns but adds OS-level chaos: forcing paging storms, exercising rowhammer patterns, and thrashing the virtual memory manager. It finds bugs where the memory subsystem interacts poorly with the kernel.
 
-pmemtester wraps memtester's thorough pattern testing with per-core parallelism (closing the bandwidth gap with stressapptest) and EDAC monitoring (detecting hardware errors invisible to all three tools above).
+**pmemtester** combines the first two approaches in sequence — deterministic pattern testing (microscope) followed by randomised bus-contention stress (hammer) — while listening to the hardware throughout via EDAC. No other userspace tool detects ECC correctable errors: the ECC hardware silently fixes single-bit errors before userspace reads the data, so memtester, stressapptest, and stress-ng all report PASS on memory that is actively accumulating correctable errors. pmemtester's EDAC monitoring catches these.
 
 See [FAQ.md](FAQ.md#what-does-pmemtester-test-that-stressapptest-doesnt-and-vice-versa) for detailed algorithmic comparisons.
 
