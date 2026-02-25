@@ -964,6 +964,238 @@ MOCK
     grep -q "memtester found" "${log_dir}/master.log"
 }
 
+# End-to-end memory size verification tests
+#
+# These tests verify that the full pipeline (RAM detection → percentage →
+# per-core division → argument formatting) produces the correct memory
+# values passed to memtester and stressapptest.
+
+# Fixture proc_meminfo_normal: MemAvailable=12288000 kB, MemTotal=16384000 kB
+# Mock lscpu: 2 physical cores
+# Default: 90% of available = 12288000*90/100 = 11059200 kB
+#   per core: 11059200/2 = 5529600 kB = 5400 MB (5529600/1024)
+#   memtester arg: "5400M"
+#   stressapptest -M: 10800 (5400*2)
+
+@test "memtester receives correct per-core memory size (default 90% available)" {
+    # Argument-capturing memtester mock
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+echo "$1" >> "${PMEMTESTER_ARG_LOG}"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    export PMEMTESTER_ARG_LOG="${TEST_LOG_DIR}/memtester_args.txt"
+
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --percent 90 \
+        $TEST_STRESSAPPTEST_OFF
+
+    # Each of 2 cores should get 5400M
+    [[ -f "$PMEMTESTER_ARG_LOG" ]]
+    local line_count
+    line_count=$(wc -l < "$PMEMTESTER_ARG_LOG")
+    [[ "$line_count" -eq 2 ]]
+
+    while IFS= read -r arg; do
+        [[ "$arg" == "5400M" ]]
+    done < "$PMEMTESTER_ARG_LOG"
+}
+
+@test "memtester receives correct per-core memory size (50% available)" {
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+echo "$1" >> "${PMEMTESTER_ARG_LOG}"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    export PMEMTESTER_ARG_LOG="${TEST_LOG_DIR}/memtester_args.txt"
+
+    # 50% of 12288000 = 6144000 kB / 2 cores = 3072000 kB = 3000 MB
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --percent 50 \
+        $TEST_STRESSAPPTEST_OFF
+
+    while IFS= read -r arg; do
+        [[ "$arg" == "3000M" ]]
+    done < "$PMEMTESTER_ARG_LOG"
+}
+
+@test "memtester receives correct per-core memory size (total RAM)" {
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+echo "$1" >> "${PMEMTESTER_ARG_LOG}"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    export PMEMTESTER_ARG_LOG="${TEST_LOG_DIR}/memtester_args.txt"
+
+    # 90% of MemTotal 16384000 = 14745600 kB / 2 = 7372800 kB = 7200 MB
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --percent 90 --ram-type total \
+        $TEST_STRESSAPPTEST_OFF
+
+    while IFS= read -r arg; do
+        [[ "$arg" == "7200M" ]]
+    done < "$PMEMTESTER_ARG_LOG"
+}
+
+@test "memtester receives correct per-core memory size (low RAM fixture, 4 cores)" {
+    export PROC_MEMINFO="${FIXTURE_DIR}/proc_meminfo_low"
+    # MemAvailable=204800 kB, 90% = 184320 kB
+    # 4 cores: 184320/4 = 46080 kB = 45 MB (46080/1024)
+    create_mock lscpu 'echo "# Socket,Core"; echo "0,0"; echo "0,1"; echo "0,2"; echo "0,3"'
+
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+echo "$1" >> "${PMEMTESTER_ARG_LOG}"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    export PMEMTESTER_ARG_LOG="${TEST_LOG_DIR}/memtester_args.txt"
+
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --percent 90 \
+        $TEST_STRESSAPPTEST_OFF
+
+    local line_count
+    line_count=$(wc -l < "$PMEMTESTER_ARG_LOG")
+    [[ "$line_count" -eq 4 ]]
+
+    while IFS= read -r arg; do
+        [[ "$arg" == "45M" ]]
+    done < "$PMEMTESTER_ARG_LOG"
+}
+
+@test "stressapptest receives correct total memory size (default 90% available)" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    # Argument-capturing stressapptest mock
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_memsize"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --percent 90 \
+        --stressapptest on \
+        --stressapptest-seconds 1 \
+        --stressapptest-dir "$sat_dir"
+
+    # 5400 MB/core * 2 cores = 10800 MB
+    grep -q -- "-M 10800" "${log_dir}/stressapptest.log"
+}
+
+@test "stressapptest receives correct total memory size (50% available)" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_memsize50"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --percent 50 \
+        --stressapptest on \
+        --stressapptest-seconds 1 \
+        --stressapptest-dir "$sat_dir"
+
+    # 3000 MB/core * 2 cores = 6000 MB
+    grep -q -- "-M 6000" "${log_dir}/stressapptest.log"
+}
+
+@test "stressapptest receives correct total memory size (low RAM, 4 cores)" {
+    export PROC_MEMINFO="${FIXTURE_DIR}/proc_meminfo_low"
+    create_mock lscpu 'echo "# Socket,Core"; echo "0,0"; echo "0,1"; echo "0,2"; echo "0,3"'
+
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_lowram"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --percent 90 \
+        --stressapptest on \
+        --stressapptest-seconds 1 \
+        --stressapptest-dir "$sat_dir"
+
+    # 45 MB/core * 4 cores = 180 MB
+    grep -q -- "-M 180" "${log_dir}/stressapptest.log"
+}
+
+@test "memtester and stressapptest receive consistent memory sizes" {
+    # Verify both tools get the same total: per_core * cores == stressapptest -M
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+echo "$1" >> "${PMEMTESTER_ARG_LOG}"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    export PMEMTESTER_ARG_LOG="${TEST_LOG_DIR}/memtester_args.txt"
+
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_consistent"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --percent 90 \
+        --stressapptest on \
+        --stressapptest-seconds 1 \
+        --stressapptest-dir "$sat_dir"
+
+    # Extract per-core MB from memtester arg (strip trailing M)
+    local per_core_mb
+    per_core_mb=$(head -1 "$PMEMTESTER_ARG_LOG" | sed 's/M$//')
+
+    # Count memtester instances (= core count)
+    local core_count
+    core_count=$(wc -l < "$PMEMTESTER_ARG_LOG")
+
+    # Calculate expected total
+    local expected_total=$(( per_core_mb * core_count ))
+
+    # Verify stressapptest got that total
+    grep -q -- "-M ${expected_total}" "${log_dir}/stressapptest.log"
+}
+
 @test "full run CE with --allow-ce --color on shows yellow WARNING" {
     local edac_fixture="${TEST_LOG_DIR}/edac_ce_warn"
     mkdir -p "${edac_fixture}/mc/mc0/csrow0"
