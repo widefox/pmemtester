@@ -2,7 +2,7 @@ NAME    := pmemtester
 VERSION := 0.3
 PREFIX  := /usr/local
 
-.PHONY: test test-unit test-integration coverage lint clean dist install uninstall
+.PHONY: test test-unit test-integration test-smoke coverage lint clean dist install uninstall
 
 test: test-unit test-integration
 
@@ -11,6 +11,9 @@ test-unit:
 
 test-integration:
 	bats test/integration/
+
+test-smoke:
+	bats test/smoke/
 
 coverage:
 	kcov --include-path=./lib,./pmemtester ./coverage $(shell which bats) test/unit/ test/integration/
