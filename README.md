@@ -33,16 +33,31 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 Install dependencies from your distribution's package manager or build from source:
 
 ```bash
-# Debian / Ubuntu
+# Debian 12/13 / Ubuntu 22.04/24.04
 apt install memtester stressapptest
+
+# RHEL 8/9/10 / Rocky 8/9/10 / AlmaLinux 8/9/10 (requires EPEL)
+dnf install epel-release           # Rocky/Alma; RHEL: see EPEL docs
+dnf install memtester stressapptest
 
 # Fedora
 dnf install memtester stressapptest
 
-# Arch Linux
-pacman -S community/memtester stressapptest
+# SLES 15 (stressapptest via PackageHub; memtester: build from source)
+SUSEConnect -p PackageHub/15.7/x86_64
+zypper install stressapptest
 
-# Or build from source
+# SLES 16 / openSUSE Leap 16 (both: build from source)
+# memtester: https://pyropus.ca./software/memtester/
+# stressapptest: https://github.com/stressapptest/stressapptest
+
+# Arch Linux
+pacman -S extra/memtester stressapptest
+
+# Alpine Linux
+apk add memtester                  # stressapptest: build from source
+
+# Or build both from source
 # memtester: https://pyropus.ca./software/memtester/
 # stressapptest: https://github.com/stressapptest/stressapptest
 ```
@@ -58,26 +73,37 @@ make dist              # Create .tgz distribution archive
 
 ### Distro packaging
 
-On distributions that package memtester or stressapptest to `/usr/bin`, pass the directory at install time to change the default:
+pmemtester looks for `memtester` in `/usr/local/bin` by default. On distributions that package memtester or stressapptest elsewhere, pass the directory at install time to change the default:
 
 ```bash
-make install MEMTESTER_DIR=/usr/bin
-make install STRESSAPPTEST_DIR=/usr/bin
-make install MEMTESTER_DIR=/usr/bin STRESSAPPTEST_DIR=/usr/bin   # both
+make install MEMTESTER_DIR=/usr/bin                             # RPM-based distros
+make install MEMTESTER_DIR=/usr/sbin                            # Debian / Ubuntu
+make install MEMTESTER_DIR=/usr/bin STRESSAPPTEST_DIR=/usr/bin  # both
 ```
 
 This patches the defaults so `pmemtester --help` shows the correct paths and binaries are found without needing `--memtester-dir` or `--stressapptest-dir`. The runtime flags still override at runtime.
 
-Distributions that package memtester (all install to `/usr/bin/memtester`):
+#### Package availability
 
-- Fedora
-- Debian / Ubuntu
-- Arch Linux
-- openSUSE
-- Gentoo
-- Alpine Linux
+| Distribution | memtester | stressapptest | Repository | Notes |
+|---|---|---|---|---|
+| Debian 13 (trixie) | `/usr/sbin/memtester` | `/usr/bin/stressapptest` | main | broad arch support (amd64, arm64, riscv64, ppc64el, s390x, armhf, i386) |
+| Debian 12 (bookworm) | `/usr/sbin/memtester` | `/usr/bin/stressapptest` | main | stressapptest: amd64, armhf, i386 only |
+| Ubuntu 24.04 / 22.04 | `/usr/sbin/memtester` | `/usr/bin/stressapptest` | universe | universe enabled by default on server installs |
+| RHEL 10 | `/usr/bin/memtester` | `/usr/bin/stressapptest` | [EPEL 10](https://docs.fedoraproject.org/en-US/epel/) | not in BaseOS or AppStream; EPEL required |
+| RHEL 8 / 9 | `/usr/bin/memtester` | `/usr/bin/stressapptest` | [EPEL](https://docs.fedoraproject.org/en-US/epel/) | not in BaseOS or AppStream; EPEL required |
+| Rocky / AlmaLinux 10 | `/usr/bin/memtester` | `/usr/bin/stressapptest` | [EPEL 10](https://docs.fedoraproject.org/en-US/epel/) | `dnf install epel-release` first |
+| Rocky / AlmaLinux 8 / 9 | `/usr/bin/memtester` | `/usr/bin/stressapptest` | [EPEL](https://docs.fedoraproject.org/en-US/epel/) | `dnf install epel-release` first |
+| Fedora 43 | `/usr/bin/memtester` | `/usr/bin/stressapptest` | fedora | base repos |
+| SLES 16 | build from source | build from source | -- | neither in official repos; build from source or use OBS |
+| SLES 15 SP7 | build from source | `/usr/bin/stressapptest` | [PackageHub](https://packagehub.suse.com/) | memtester not in official repos |
+| openSUSE Leap 16 | build from source | build from source | -- | neither in official repos; available via [OBS](https://build.opensuse.org/) community repos |
+| openSUSE Leap 15 | build from source | `/usr/bin/stressapptest` | oss | memtester available via third-party [OBS utilities](https://software.opensuse.org/download.html?project=utilities&package=memtester) repo |
+| Arch Linux | `/usr/bin/memtester` | `/usr/bin/stressapptest` | extra | |
+| Gentoo | `/usr/bin/memtester` | `/usr/bin/stressapptest` | gentoo | |
+| Alpine 3.23 | `/usr/bin/memtester` | build from source | community | |
 
-pmemtester looks for `memtester` in `/usr/local/bin` by default. Override at runtime with `--memtester-dir DIR`, or patch the default at install time with `make install MEMTESTER_DIR=/usr/bin` (see above). Same for stressapptest with `--stressapptest-dir DIR` and `make install STRESSAPPTEST_DIR=/usr/bin`.
+**Note on Debian/Ubuntu:** memtester installs to `/usr/sbin`, not `/usr/bin`. Use `--memtester-dir /usr/sbin` at runtime, or `make install MEMTESTER_DIR=/usr/sbin` to change the default.
 
 ### Test dependencies
 

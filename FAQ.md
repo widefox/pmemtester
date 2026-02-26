@@ -323,11 +323,12 @@ Nearly all major distros enable `CONFIG_EDAC=y` (built-in) with hardware drivers
 | Distro | EDAC Enabled | Notes |
 |--------|-------------|-------|
 | RHEL 8/9/10 | Yes | Full support |
-| Rocky / AlmaLinux 9 | Yes | Mirrors RHEL |
-| Fedora | Yes | Full driver set |
-| Ubuntu 22.04/24.04 | Yes | Cloud kernels may differ |
-| Debian 12 | Yes | Cloud kernel disables EDAC |
-| SLES / openSUSE | Yes | Full server-grade support |
+| Rocky / AlmaLinux 8/9/10 | Yes | Mirrors RHEL |
+| Fedora 43 | Yes | Full driver set |
+| Ubuntu 24.04 / 22.04 | Yes | Cloud kernels may differ |
+| Debian 13 / 12 | Yes | Cloud kernel disables EDAC |
+| SLES 16 / 15 SP7 | Yes | Full server-grade support |
+| openSUSE Leap 16 / 15 | Yes | Full server-grade support |
 | Arch Linux | Yes | Loads even on desktop hardware |
 | Gentoo | Manual | User must enable in kernel config |
 
