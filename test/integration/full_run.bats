@@ -1196,6 +1196,150 @@ MOCK
     grep -q -- "-M ${expected_total}" "${log_dir}/stressapptest.log"
 }
 
+# --- Decimal --percent and --size integration tests ---
+
+@test "full run with --percent 0.1 passes" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --percent 0.1 \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "PASS"
+}
+
+@test "full run with --percent 50.5 passes" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --percent 50.5 \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "PASS"
+}
+
+# Fixture: MemAvailable=12288000 kB, 2 cores
+# 0.1% of 12288000 = 12288 kB / 2 = 6144 kB = 6 MB per core
+@test "memory size verification --percent 0.1" {
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+echo "$1" >> "${PMEMTESTER_ARG_LOG}"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+    export PMEMTESTER_ARG_LOG="${TEST_LOG_DIR}/memtester_args.txt"
+
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --percent 0.1 \
+        $TEST_STRESSAPPTEST_OFF
+
+    while IFS= read -r arg; do
+        [[ "$arg" == "6M" ]]
+    done < "$PMEMTESTER_ARG_LOG"
+}
+
+@test "full run with --size 256M passes" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --size 256M \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "PASS"
+}
+
+@test "full run with --size 2G passes" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --size 2G \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "PASS"
+}
+
+# --size 256M = 262144 kB / 2 cores = 131072 kB = 128 MB per core
+@test "memory size verification --size 256M" {
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+echo "$1" >> "${PMEMTESTER_ARG_LOG}"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+    export PMEMTESTER_ARG_LOG="${TEST_LOG_DIR}/memtester_args.txt"
+
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --size 256M \
+        $TEST_STRESSAPPTEST_OFF
+
+    local line_count
+    line_count=$(wc -l < "$PMEMTESTER_ARG_LOG")
+    [[ "$line_count" -eq 2 ]]
+
+    while IFS= read -r arg; do
+        [[ "$arg" == "128M" ]]
+    done < "$PMEMTESTER_ARG_LOG"
+}
+
+# stressapptest total: --size 256M → -M 256
+@test "stressapptest total with --size 256M" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_size_sat"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --size 256M \
+        --stressapptest on \
+        --stressapptest-seconds 1 \
+        --stressapptest-dir "$sat_dir"
+
+    # 128 MB/core * 2 cores = 256 MB
+    grep -q -- "-M 256" "${log_dir}/stressapptest.log"
+}
+
+# --size 1024K / 2 cores = 512 kB per core → < 1 MB → fails
+@test "too small --size 1024K with 2 cores fails" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --size 1024K \
+        $TEST_STRESSAPPTEST_OFF
+    assert_failure
+    assert_output --partial "RAM per core"
+}
+
+@test "mutual exclusion --percent and --size fails" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --percent 50 --size 256M \
+        $TEST_STRESSAPPTEST_OFF
+    assert_failure
+    assert_output --partial "mutually exclusive"
+}
+
+@test "--size with --ram-type passes (ram-type silently ignored)" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --size 256M --ram-type total \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "PASS"
+}
+
 @test "full run CE with --allow-ce --color on shows yellow WARNING" {
     local edac_fixture="${TEST_LOG_DIR}/edac_ce_warn"
     mkdir -p "${edac_fixture}/mc/mc0/csrow0"

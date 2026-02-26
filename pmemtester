@@ -45,10 +45,16 @@ main() {
     esac
 
     local ram_kb core_count ram_per_core_mb
-    ram_kb="$(calculate_test_ram_kb "$PERCENT" "$RAM_TYPE")"
+    if [[ -n "${SIZE:-}" ]]; then
+        ram_kb="$(parse_size_to_kb "$SIZE")"
+    else
+        local millipercent
+        millipercent="$(decimal_to_millipercent "$PERCENT")"
+        ram_kb="$(calculate_test_ram_kb_milli "$millipercent" "$RAM_TYPE")"
+    fi
     core_count="$(get_core_count)"
     ram_per_core_mb="$(divide_ram_per_core_mb "$ram_kb" "$core_count")"
-    validate_ram_params "$PERCENT" "$core_count" "$ram_per_core_mb"
+    validate_ram_params "$core_count" "$ram_per_core_mb"
 
     local size_arg
     size_arg="$(mb_to_memtester_arg "$ram_per_core_mb")"

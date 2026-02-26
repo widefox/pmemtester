@@ -41,19 +41,31 @@ divide_ram_per_core_mb() {
     echo "$per_core_mb"
 }
 
-# validate_ram_params: validate RAM calculation parameters
-# Usage: validate_ram_params <percent> <num_cores> <ram_per_core_mb>
-validate_ram_params() {
-    local percent="$1" num_cores="$2" ram_per_core_mb="$3"
+# calculate_test_ram_kb_milli: calculate target test RAM in kB using millipercents
+# Usage: calculate_test_ram_kb_milli <millipercent> <ram_type>
+# ram_type: available | total | free
+calculate_test_ram_kb_milli() {
+    local millipercent="$1" ram_type="$2"
+    local base_kb
 
-    if [[ "$percent" -le 0 ]]; then
-        echo "ERROR: percent must be > 0 (got ${percent})" >&2
-        return 1
-    fi
-    if [[ "$percent" -gt 100 ]]; then
-        echo "ERROR: percent must be <= 100 (got ${percent})" >&2
-        return 1
-    fi
+    case "$ram_type" in
+        available) base_kb="$(get_available_ram_kb)" ;;
+        total)     base_kb="$(get_total_ram_kb)" ;;
+        free)      base_kb="$(get_free_ram_kb)" ;;
+        *)
+            echo "ERROR: invalid ram_type '${ram_type}' (use: available, total, free)" >&2
+            return 1
+            ;;
+    esac
+
+    percentage_of_milli "$base_kb" "$millipercent"
+}
+
+# validate_ram_params: validate RAM calculation parameters
+# Usage: validate_ram_params <num_cores> <ram_per_core_mb>
+validate_ram_params() {
+    local num_cores="$1" ram_per_core_mb="$2"
+
     if [[ "$num_cores" -le 0 ]]; then
         echo "ERROR: core count must be > 0 (got ${num_cores})" >&2
         return 1

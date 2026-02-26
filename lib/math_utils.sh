@@ -59,3 +59,66 @@ max_val() {
         echo "$2"
     fi
 }
+
+# decimal_to_millipercent: convert a decimal percent string to integer millipercents
+# 0.1 → 100, 90 → 90000, 50.5 → 50500
+# Supports up to 3 decimal places. Rejects empty, negative, non-numeric, 4+ decimals.
+# Usage: decimal_to_millipercent <percent_string>
+decimal_to_millipercent() {
+    local input="$1"
+
+    # Reject empty
+    if [[ -z "$input" ]]; then
+        echo "ERROR: percent value is empty" >&2
+        return 1
+    fi
+
+    # Reject negative
+    if [[ "$input" == -* ]]; then
+        echo "ERROR: percent must not be negative (got ${input})" >&2
+        return 1
+    fi
+
+    # Validate format: optional digits, optional dot, optional digits
+    if [[ ! "$input" =~ ^[0-9]*\.?[0-9]*$ ]]; then
+        echo "ERROR: percent must be numeric (got ${input})" >&2
+        return 1
+    fi
+
+    # Reject lone dot
+    if [[ "$input" == "." ]]; then
+        echo "ERROR: percent value is empty" >&2
+        return 1
+    fi
+
+    local int_part frac_part
+    if [[ "$input" == *.* ]]; then
+        int_part="${input%%.*}"
+        frac_part="${input#*.}"
+        # Default empty parts to 0
+        int_part="${int_part:-0}"
+        # Reject 4+ decimal places
+        if [[ ${#frac_part} -gt 3 ]]; then
+            echo "ERROR: --percent supports up to 3 decimal places (got ${input})" >&2
+            return 1
+        fi
+    else
+        int_part="$input"
+        frac_part=""
+    fi
+
+    # Pad fractional part to exactly 3 digits
+    while [[ ${#frac_part} -lt 3 ]]; do
+        frac_part="${frac_part}0"
+    done
+
+    # Force base-10 to prevent octal interpretation
+    echo $(( 10#$int_part * 1000 + 10#$frac_part ))
+}
+
+# percentage_of_milli: value * millipercent / 100000
+# Usage: percentage_of_milli <value> <millipercent>
+percentage_of_milli() {
+    local value="$1" millipercent="$2"
+    echo $(( value * millipercent / 100000 ))
+}

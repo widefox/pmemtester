@@ -1,6 +1,8 @@
 setup() {
     load '../test_helper/common_setup'
     _common_setup
+    load_lib math_utils.sh
+    load_lib unit_convert.sh
     load_lib cli.sh
 }
 
@@ -68,44 +70,44 @@ setup() {
 }
 
 @test "validate_args percent zero fails" {
-    PERCENT=0 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=1
+    PERCENT=0 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_failure
 }
 
 @test "validate_args percent 101 fails" {
-    PERCENT=101 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=1
+    PERCENT=101 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_failure
 }
 
 @test "validate_args invalid ram type fails" {
-    PERCENT=90 RAM_TYPE=bogus MEMTESTER_DIR=/usr/local/bin ITERATIONS=1
+    PERCENT=90 RAM_TYPE=bogus MEMTESTER_DIR=/usr/local/bin ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_failure
 }
 
 @test "validate_args iterations zero fails" {
-    PERCENT=90 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=0
+    PERCENT=90 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=0 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_failure
     assert_output --partial "iterations"
 }
 
 @test "validate_args valid defaults passes" {
-    PERCENT=90 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=1
+    PERCENT=90 RAM_TYPE=available MEMTESTER_DIR=/usr/local/bin ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_success
 }
 
 @test "validate_args valid ram-type total passes" {
-    PERCENT=90 RAM_TYPE=total MEMTESTER_DIR=/usr/local/bin ITERATIONS=1
+    PERCENT=90 RAM_TYPE=total MEMTESTER_DIR=/usr/local/bin ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_success
 }
 
 @test "validate_args valid ram-type free passes" {
-    PERCENT=90 RAM_TYPE=free MEMTESTER_DIR=/usr/local/bin ITERATIONS=1
+    PERCENT=90 RAM_TYPE=free MEMTESTER_DIR=/usr/local/bin ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_success
 }
@@ -155,7 +157,7 @@ setup() {
 }
 
 @test "validate_args invalid color mode fails" {
-    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=bogus
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=bogus STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_failure
     assert_output --partial "color"
@@ -275,33 +277,33 @@ setup() {
 }
 
 @test "validate_args invalid stressapptest mode fails" {
-    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=bogus STRESSAPPTEST_SECONDS=0
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=bogus STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_failure
     assert_output --partial "stressapptest"
 }
 
 @test "validate_args negative stressapptest-seconds fails" {
-    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=-1
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=-1 SIZE="" PERCENT_SET=0
     run validate_args
     assert_failure
     assert_output --partial "stressapptest-seconds"
 }
 
 @test "validate_args valid stressapptest defaults passes" {
-    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_success
 }
 
 @test "validate_args stressapptest mode on passes" {
-    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=on STRESSAPPTEST_SECONDS=60
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=on STRESSAPPTEST_SECONDS=60 SIZE="" PERCENT_SET=0
     run validate_args
     assert_success
 }
 
 @test "validate_args stressapptest mode off passes" {
-    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=off STRESSAPPTEST_SECONDS=0
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=off STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
     run validate_args
     assert_success
 }
@@ -335,4 +337,150 @@ setup() {
     run usage
     assert_success
     assert_output --partial "default: /opt/sat"
+}
+
+# --- decimal --percent tests ---
+
+@test "parse_args --percent 0.1" {
+    parse_args --percent 0.1
+    [[ "$PERCENT" == "0.1" ]]
+}
+
+@test "parse_args --percent 50.5" {
+    parse_args --percent 50.5
+    [[ "$PERCENT" == "50.5" ]]
+}
+
+@test "parse_args --percent sets PERCENT_SET" {
+    parse_args --percent 80
+    [[ "$PERCENT_SET" == "1" ]]
+}
+
+@test "parse_args default PERCENT_SET is 0" {
+    parse_args
+    [[ "$PERCENT_SET" == "0" ]]
+}
+
+@test "validate_args decimal percent 0.1 passes" {
+    PERCENT=0.1 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
+    run validate_args
+    assert_success
+}
+
+@test "validate_args decimal percent 50.5 passes" {
+    PERCENT=50.5 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
+    run validate_args
+    assert_success
+}
+
+@test "validate_args decimal percent 0.001 passes" {
+    PERCENT=0.001 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
+    run validate_args
+    assert_success
+}
+
+@test "validate_args decimal percent 100.0 passes" {
+    PERCENT=100.0 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
+    run validate_args
+    assert_success
+}
+
+@test "validate_args percent 0 fails (decimal path)" {
+    PERCENT=0 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
+    run validate_args
+    assert_failure
+}
+
+@test "validate_args percent 0.0 fails" {
+    PERCENT=0.0 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
+    run validate_args
+    assert_failure
+}
+
+@test "validate_args percent 100.1 fails" {
+    PERCENT=100.1 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
+    run validate_args
+    assert_failure
+}
+
+@test "validate_args percent abc fails (decimal path)" {
+    PERCENT=abc RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0
+    run validate_args
+    assert_failure
+}
+
+# --- --size flag tests ---
+
+@test "parse_args --size 256M" {
+    parse_args --size 256M
+    [[ "$SIZE" == "256M" ]]
+}
+
+@test "parse_args --size 2G" {
+    parse_args --size 2G
+    [[ "$SIZE" == "2G" ]]
+}
+
+@test "parse_args --size 1024K" {
+    parse_args --size 1024K
+    [[ "$SIZE" == "1024K" ]]
+}
+
+@test "parse_args default SIZE is empty" {
+    parse_args
+    [[ -z "$SIZE" ]]
+}
+
+@test "validate_args --size 256M passes" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="256M" PERCENT_SET=0
+    run validate_args
+    assert_success
+}
+
+@test "validate_args --size 2G passes" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="2G" PERCENT_SET=0
+    run validate_args
+    assert_success
+}
+
+@test "validate_args --size bare number fails" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="256" PERCENT_SET=0
+    run validate_args
+    assert_failure
+    assert_output --partial "unit suffix"
+}
+
+@test "validate_args --size 0M fails" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="0M" PERCENT_SET=0
+    run validate_args
+    assert_failure
+}
+
+# --- mutual exclusion tests ---
+
+@test "validate_args --percent and --size mutually exclusive" {
+    PERCENT=50 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="256M" PERCENT_SET=1
+    run validate_args
+    assert_failure
+    assert_output --partial "mutually exclusive"
+}
+
+@test "validate_args --size without explicit --percent passes" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="256M" PERCENT_SET=0
+    run validate_args
+    assert_success
+}
+
+# --- usage text ---
+
+@test "usage includes --size" {
+    run usage
+    assert_success
+    assert_output --partial "--size"
+}
+
+@test "usage shows decimal percent range" {
+    run usage
+    assert_success
+    assert_output --partial "0.001-100"
 }

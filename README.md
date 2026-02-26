@@ -10,7 +10,8 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 
 - Runs one memtester instance per CPU core to saturate the memory bus on any system
 - stressapptest second pass (by default) for randomised bus-contention stress testing
-- Configurable RAM percentage (default 90% of available)
+- Configurable RAM percentage with decimal support (default 90% of available; supports 0.001-100)
+- Explicit test size via `--size` flag with binary units: KiB, MiB, GiB, TiB (e.g., `--size 256M`, `--size 2G`)
 - RAM measurement basis: available (default), total, or free
 - Automatic kernel memory lock (`ulimit -l`) configuration
 - Linux EDAC hardware error detection with intermediate results after memtester and final check spanning both passes
@@ -88,6 +89,12 @@ pmemtester looks for `memtester` in `/usr/local/bin` by default. Override at run
 # Run with safe defaults (90% available RAM, 1 iteration)
 sudo pmemtester
 
+# Quick smoke test: 0.1% of available RAM (e.g., ~12 MB on a 12 GB system)
+sudo pmemtester --percent 0.1
+
+# Test exactly 256 MB (useful for quick validation)
+sudo pmemtester --size 256M
+
 # Estimate duration: run 1% and multiply by 90 for a full 90% run
 # With stressapptest (default), multiply by 180 (Phase 2 matches Phase 1)
 sudo pmemtester --percent 1 --stressapptest off
@@ -100,7 +107,8 @@ $ pmemtester --help
 Usage: pmemtester 0.3 [OPTIONS]
 
 Options:
-  --percent N              Percentage of RAM to test (1-100, default: 90)
+  --percent N              Percentage of RAM to test (0.001-100, default: 90)
+  --size SIZE              Total RAM to test: KiB/MiB/GiB/TiB (K, M, G, T suffix; e.g., 256M = 256 MiB)
   --ram-type TYPE          RAM measurement: available (default), total, free
   --memtester-dir DIR      Directory containing memtester binary (default: /usr/local/bin)
   --log-dir DIR            Directory for log files (default: /tmp/pmemtester.PID)
@@ -158,6 +166,38 @@ sudo pmemtester --percent 80 --ram-type total --iterations 3
 ```
 
 This tests 80% of total RAM (not just available) with 3 memtester iterations per core. Multiple iterations repeat the full pattern suite, increasing the chance of catching intermittent faults at the cost of proportionally longer runtime.
+
+### Decimal percentages
+
+The `--percent` flag accepts decimal values with up to 3 decimal places (0.001-100). This is useful on large servers where even 1% is significant:
+
+```bash
+# 0.1% of 512 GB ≈ 512 MB: a quick smoke test
+sudo pmemtester --percent 0.1
+
+# 50.5% of available RAM
+sudo pmemtester --percent 50.5
+```
+
+### Explicit test size
+
+The `--size` flag specifies an exact amount of RAM to test. It requires a unit suffix: K (KiB), M (MiB), G (GiB), or T (TiB). All units are binary (powers of two): 1K = 1024 bytes, 1M = 1,048,576 bytes, 1G = 1,073,741,824 bytes, 1T = 1,099,511,627,776 bytes. Suffixes are case-insensitive. The total is divided equally among cores, the same as `--percent`. `--size` and `--percent` are mutually exclusive.
+
+```bash
+# Test exactly 256 MiB total (128 MiB per core on a 2-core system)
+sudo pmemtester --size 256M
+
+# Test exactly 2 GiB total
+sudo pmemtester --size 2G
+
+# Test exactly 1 TiB total
+sudo pmemtester --size 1T
+
+# Test exactly 1024 KiB total
+sudo pmemtester --size 1024K
+```
+
+When using `--size`, the `--ram-type` flag is accepted but has no effect (the size is absolute, not relative to system RAM).
 
 ### Single-socket testing on a multi-socket server
 
@@ -269,6 +309,8 @@ test/
 ├── integration/
 │   ├── full_run.bats                    # End-to-end tests with mocked commands
 │   └── install.bats                     # Install target tests (MEMTESTER_DIR/STRESSAPPTEST_DIR patching)
+├── smoke/
+│   └── smoke_test.bats                  # Real-system smoke tests (requires real binaries)
 ├── fixtures/                            # Synthetic /proc/meminfo, EDAC sysfs trees
 │   ├── proc_meminfo_normal
 │   ├── proc_meminfo_low
@@ -433,7 +475,8 @@ This is an important case: memtester's deterministic patterns found no stuck bit
 
 ```workflow
 parse_args --> validate_args --> color_init --> find_memtester --> resolve_stressapptest
-    --> calculate_test_ram_kb --> get_core_count --> divide_ram_per_core_mb
+    --> [if --size: parse_size_to_kb | else: decimal_to_millipercent --> calculate_test_ram_kb_milli]
+    --> get_core_count --> divide_ram_per_core_mb
     --> validate_ram_params --> check_memlock_sufficient --> init_logs
     --> [report binary detection]
     --> [EDAC before snapshot]
@@ -449,15 +492,18 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-287 tests (224 unit + 63 integration).
+380 tests (293 unit + 81 integration + 6 smoke).
 
 ```bash
 make test              # Run all tests (unit + integration)
 make test-unit         # Unit tests only
 make test-integration  # Integration tests only
+make test-smoke        # Smoke tests (real binaries, needs memtester installed)
 make coverage          # Generate kcov coverage report
 make lint              # Run shellcheck
 ```
+
+Smoke tests (`make test-smoke`) run pmemtester against real memtester/stressapptest binaries with `--percent 1` for minimal memory pressure. They skip gracefully when binaries are absent. These are kept separate from the fast mocked test suite.
 
 Test infrastructure: [bats-core](https://github.com/bats-core/bats-core) 1.13.0 with bats-support/bats-assert. Coverage via [kcov](https://simonkagstrom.github.io/kcov/) v38+ (older versions cannot instrument bash `source`d files inside bats subshells; if your distro ships an older version such as Fedora's v35, build from [source](https://github.com/SimonKagstrom/kcov)).
 

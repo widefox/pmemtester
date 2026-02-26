@@ -23,6 +23,10 @@ STRESSAPPTEST_DIR="$DEFAULT_STRESSAPPTEST_DIR"
 STRESSAPPTEST_MODE="auto"
 # shellcheck disable=SC2034
 STRESSAPPTEST_SECONDS=0
+# shellcheck disable=SC2034
+SIZE=""
+# shellcheck disable=SC2034
+PERCENT_SET=0
 
 # usage: print help text
 usage() {
@@ -30,7 +34,8 @@ usage() {
 Usage: pmemtester ${pmemtester_version:-unknown} [OPTIONS]
 
 Options:
-  --percent N         Percentage of RAM to test (1-100, default: 90)
+  --percent N         Percentage of RAM to test (0.001-100, default: 90)
+  --size SIZE         Total RAM to test: KiB/MiB/GiB/TiB (K, M, G, T suffix; e.g., 256M = 256 MiB)
   --ram-type TYPE     RAM measurement: available (default), total, free
   --memtester-dir DIR Directory containing memtester binary (default: ${DEFAULT_MEMTESTER_DIR})
   --log-dir DIR       Directory for log files (default: /tmp/pmemtester.PID)
@@ -50,7 +55,8 @@ EOF
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --percent)    PERCENT="$2"; shift 2 ;;
+            --percent)    PERCENT="$2"; PERCENT_SET=1; shift 2 ;;
+            --size)       SIZE="$2"; shift 2 ;;
             --ram-type)   RAM_TYPE="$2"; shift 2 ;;
             --memtester-dir) MEMTESTER_DIR="$2"; shift 2 ;;
             --log-dir)    LOG_DIR="$2"; shift 2 ;;
@@ -72,10 +78,32 @@ parse_args() {
 
 # validate_args: validate parsed arguments
 validate_args() {
-    if [[ "$PERCENT" -le 0 ]] || [[ "$PERCENT" -gt 100 ]]; then
-        echo "ERROR: --percent must be 1-100 (got ${PERCENT})" >&2
+    # Mutual exclusion: --percent and --size
+    if [[ "$PERCENT_SET" -eq 1 ]] && [[ -n "$SIZE" ]]; then
+        echo "ERROR: --percent and --size are mutually exclusive" >&2
         return 1
     fi
+
+    # Validate --size or --percent
+    if [[ -n "$SIZE" ]]; then
+        parse_size_to_kb "$SIZE" > /dev/null || return 1
+    else
+        # Validate percent via millipercent conversion
+        local millipercent
+        millipercent="$(decimal_to_millipercent "$PERCENT" 2>&1)" || {
+            echo "ERROR: --percent must be 0.001-100 (got ${PERCENT})" >&2
+            return 1
+        }
+        if [[ "$millipercent" -le 0 ]]; then
+            echo "ERROR: --percent must be > 0 (got ${PERCENT})" >&2
+            return 1
+        fi
+        if [[ "$millipercent" -gt 100000 ]]; then
+            echo "ERROR: --percent must be <= 100 (got ${PERCENT})" >&2
+            return 1
+        fi
+    fi
+
     case "$RAM_TYPE" in
         available|total|free) : ;;
         *)

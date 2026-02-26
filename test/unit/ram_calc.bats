@@ -73,26 +73,52 @@ setup() {
 }
 
 @test "validate_ram_params valid" {
-    run validate_ram_params 90 8 1350
+    run validate_ram_params 8 1350
     assert_success
 }
 
-@test "validate_ram_params zero percent fails" {
-    run validate_ram_params 0 8 1350
-    assert_failure
-}
-
-@test "validate_ram_params percent over 100 fails" {
-    run validate_ram_params 101 8 1350
-    assert_failure
-}
-
 @test "validate_ram_params zero cores fails" {
-    run validate_ram_params 90 0 1350
+    run validate_ram_params 0 1350
     assert_failure
 }
 
 @test "validate_ram_params zero MB per core fails" {
-    run validate_ram_params 90 8 0
+    run validate_ram_params 8 0
+    assert_failure
+}
+
+# --- calculate_test_ram_kb_milli ---
+
+@test "calculate_test_ram_kb_milli 90% available" {
+    export PROC_MEMINFO="${FIXTURE_DIR}/proc_meminfo_normal"
+    run calculate_test_ram_kb_milli 90000 available
+    assert_success
+    assert_output "11059200"
+}
+
+@test "calculate_test_ram_kb_milli 0.1% available" {
+    export PROC_MEMINFO="${FIXTURE_DIR}/proc_meminfo_normal"
+    run calculate_test_ram_kb_milli 100 available
+    assert_success
+    assert_output "12288"
+}
+
+@test "calculate_test_ram_kb_milli 50.5% available" {
+    export PROC_MEMINFO="${FIXTURE_DIR}/proc_meminfo_normal"
+    run calculate_test_ram_kb_milli 50500 available
+    assert_success
+    assert_output "6205440"
+}
+
+@test "calculate_test_ram_kb_milli 100% available" {
+    export PROC_MEMINFO="${FIXTURE_DIR}/proc_meminfo_normal"
+    run calculate_test_ram_kb_milli 100000 available
+    assert_success
+    assert_output "12288000"
+}
+
+@test "calculate_test_ram_kb_milli invalid type fails" {
+    export PROC_MEMINFO="${FIXTURE_DIR}/proc_meminfo_normal"
+    run calculate_test_ram_kb_milli 90000 bogus
     assert_failure
 }

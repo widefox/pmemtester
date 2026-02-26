@@ -87,3 +87,113 @@ setup() {
     assert_success
     assert_output "1024M"
 }
+
+# --- parse_size_to_kb ---
+
+@test "parse_size_to_kb 256M" {
+    run parse_size_to_kb 256M
+    assert_success
+    assert_output "262144"
+}
+
+@test "parse_size_to_kb 2G" {
+    run parse_size_to_kb 2G
+    assert_success
+    assert_output "2097152"
+}
+
+@test "parse_size_to_kb 1024K" {
+    run parse_size_to_kb 1024K
+    assert_success
+    assert_output "1024"
+}
+
+@test "parse_size_to_kb 1G" {
+    run parse_size_to_kb 1G
+    assert_success
+    assert_output "1048576"
+}
+
+@test "parse_size_to_kb 512G" {
+    run parse_size_to_kb 512G
+    assert_success
+    assert_output "536870912"
+}
+
+@test "parse_size_to_kb lowercase 256m" {
+    run parse_size_to_kb 256m
+    assert_success
+    assert_output "262144"
+}
+
+@test "parse_size_to_kb lowercase 2g" {
+    run parse_size_to_kb 2g
+    assert_success
+    assert_output "2097152"
+}
+
+@test "parse_size_to_kb lowercase 1024k" {
+    run parse_size_to_kb 1024k
+    assert_success
+    assert_output "1024"
+}
+
+@test "parse_size_to_kb bare number fails" {
+    run parse_size_to_kb 256
+    assert_failure
+    assert_output --partial "unit suffix"
+}
+
+@test "parse_size_to_kb zero fails" {
+    run parse_size_to_kb 0M
+    assert_failure
+}
+
+@test "parse_size_to_kb no number fails" {
+    run parse_size_to_kb M
+    assert_failure
+}
+
+@test "parse_size_to_kb empty fails" {
+    run parse_size_to_kb ""
+    assert_failure
+}
+
+@test "parse_size_to_kb decimal fails" {
+    run parse_size_to_kb 2.5G
+    assert_failure
+}
+
+@test "parse_size_to_kb unknown suffix fails" {
+    run parse_size_to_kb 256P
+    assert_failure
+}
+
+@test "parse_size_to_kb 1T" {
+    run parse_size_to_kb 1T
+    assert_success
+    assert_output "1073741824"
+}
+
+@test "parse_size_to_kb 2T" {
+    run parse_size_to_kb 2T
+    assert_success
+    assert_output "2147483648"
+}
+
+@test "parse_size_to_kb lowercase 1t" {
+    run parse_size_to_kb 1t
+    assert_success
+    assert_output "1073741824"
+}
+
+@test "parse_size_to_kb negative fails" {
+    run parse_size_to_kb -1M
+    assert_failure
+}
+
+@test "parse_size_to_kb 1K" {
+    run parse_size_to_kb 1K
+    assert_success
+    assert_output "1"
+}

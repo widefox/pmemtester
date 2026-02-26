@@ -24,6 +24,9 @@ make test-unit
 # Run only integration tests
 make test-integration
 
+# Run smoke tests (real binaries, needs memtester installed)
+make test-smoke
+
 # Run a single test file
 bats test/unit/math_utils.bats
 
@@ -42,6 +45,12 @@ make coverage
 
 # Run with options
 ./pmemtester --percent 80 --ram-type total --memtester-dir /usr/bin --iterations 3
+
+# Run with decimal percent (0.001-100) for quick smoke tests
+./pmemtester --percent 0.1
+
+# Run with explicit size (K/M/G/T suffix required; mutually exclusive with --percent)
+./pmemtester --size 256M
 
 # Run with stressapptest forced on for 60 seconds
 ./pmemtester --percent 80 --stressapptest on --stressapptest-seconds 60
@@ -62,26 +71,27 @@ lib/
 ├── color.sh                    # Coloured terminal output (PASS/FAIL/WARN)
 ├── edac.sh                     # EDAC message/counter capture and comparison
 ├── logging.sh                  # Per-thread and master log management
-├── math_utils.sh               # Integer arithmetic (ceiling_div, percentage_of, safe_multiply)
+├── math_utils.sh               # Integer arithmetic (ceiling_div, percentage_of, decimal_to_millipercent)
 ├── memlock.sh                  # Kernel memory lock limit checking and configuration
 ├── memtester_mgmt.sh           # Find and validate memtester binary
 ├── parallel.sh                 # Background memtester launch, PID tracking, wait
-├── ram_calc.sh                 # RAM allocation math (percentage, per-core division)
+├── ram_calc.sh                 # RAM allocation math (percentage, millipercent, per-core division)
 ├── stressapptest_mgmt.sh       # Find, validate, and run stressapptest binary
 ├── system_detect.sh            # RAM and core count from /proc/meminfo and lscpu
 ├── timing.sh                   # Timing, status output, phase formatting
-└── unit_convert.sh             # kB/MB/bytes conversions
+└── unit_convert.sh             # kB/MB/bytes conversions, parse_size_to_kb (K/M/G/T)
 ```
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → `calculate_test_ram_kb` → `get_core_count` → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection) → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → (if `--size`: `parse_size_to_kb` | else: `decimal_to_millipercent` → `calculate_test_ram_kb_milli`) → `get_core_count` → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection) → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
 
 ### Test Infrastructure
 
 - **Framework**: bats-core 1.13.0 with bats-support and bats-assert (git submodules)
 - **Mocking**: PATH-prepend mock scripts for external commands (`memtester`, `lscpu`, `nproc`, `dmesg`); environment variable overrides for files (`PROC_MEMINFO`, `EDAC_BASE`, `MOCK_ULIMIT_L`); function overrides for builtins (`_read_ulimit_l`)
 - **Fixtures**: `test/fixtures/` contains synthetic `/proc/meminfo` files and EDAC sysfs directory trees
+- **Smoke tests**: `test/smoke/smoke_test.bats` runs against real binaries with `--percent 1`; skips when binaries are absent. Separate `make test-smoke` target keeps them out of the fast mocked suite.
 - **Coverage**: kcov 38+ with `--include-path=./lib,./pmemtester` (v35 cannot instrument bash `source`d files inside bats subshells; build from [source](https://github.com/SimonKagstrom/kcov) if distro version is too old)
 
 ### Bash Integer Arithmetic
@@ -92,6 +102,7 @@ Bash has no floating-point. All arithmetic must use integer math with careful at
 - **Overflow**: Bash integers are 64-bit signed; intermediate products of large values (bytes) can overflow. Work in kB or MB where appropriate
 - **Units**: Track units explicitly (bytes vs kB vs MB) and convert at boundaries
 - **`(( i++ ))` pitfall**: When `i=0`, the expression evaluates to 0 (falsy) and returns exit code 1 under `set -e`. Use `i=$(( i + 1 ))` instead.
+- **Millipercent strategy**: Decimal percent strings (e.g., "0.1", "50.5") are converted to integer millipercents at the CLI boundary (0.1% = 100, 90% = 90000). All downstream arithmetic uses `value * millipercent / 100000`. Up to 3 decimal places supported. Use `10#` prefix when parsing to prevent octal interpretation.
 
 ### Safety Constraints
 
