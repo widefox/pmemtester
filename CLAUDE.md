@@ -54,6 +54,9 @@ make coverage
 
 # Run with stressapptest forced on for 60 seconds
 ./pmemtester --percent 80 --stressapptest on --stressapptest-seconds 60
+
+# Disable time estimation calibration
+./pmemtester --percent 80 --estimate off
 ```
 
 ## Architecture
@@ -70,6 +73,7 @@ lib/
 ├── cli.sh                      # Argument parsing and validation
 ├── color.sh                    # Coloured terminal output (PASS/FAIL/WARN)
 ├── edac.sh                     # EDAC message/counter capture and comparison
+├── estimate.sh                 # Time estimation (calibration, duration scaling, ETA display)
 ├── logging.sh                  # Per-thread and master log management
 ├── math_utils.sh               # Integer arithmetic (ceiling_div, percentage_of, decimal_to_millipercent)
 ├── memlock.sh                  # Kernel memory lock limit checking and configuration
@@ -84,7 +88,7 @@ lib/
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → (if `--size`: `parse_size_to_kb` | else: `decimal_to_millipercent` → `calculate_test_ram_kb_milli`) → `get_core_count` → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection) → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → (if `--size`: `parse_size_to_kb` | else: `decimal_to_millipercent` → `calculate_test_ram_kb_milli`) → `get_core_count` → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection) → (adaptive calibration: `get_l3_cache_kb` → `run_calibration` → `estimate_duration` → `print_estimate`) → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
 
 ### Test Infrastructure
 

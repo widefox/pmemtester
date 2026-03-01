@@ -1,6 +1,9 @@
 # Smoke tests: run pmemtester against real memtester/stressapptest binaries.
 # These require real binaries installed and take 10-30s to complete.
 # Run with: make test-smoke
+#
+# Use --size with fixed amounts rather than --percent to ensure predictable
+# behaviour regardless of host RAM. stressapptest needs ~64M+ to initialize.
 
 MEMTESTER_BIN="/usr/local/bin/memtester"
 STRESSAPPTEST_BIN="/usr/local/bin/stressapptest"
@@ -21,7 +24,7 @@ teardown() {
     [[ -x "$MEMTESTER_BIN" ]] || skip "memtester not found at $MEMTESTER_BIN"
 
     run "${PROJECT_ROOT}/pmemtester" \
-        --percent 1 \
+        --size 16M \
         --iterations 1 \
         --stressapptest off \
         --log-dir "$TEST_LOG_DIR"
@@ -42,7 +45,7 @@ teardown() {
     [[ -x "$STRESSAPPTEST_BIN" ]] || skip "stressapptest not found at $STRESSAPPTEST_BIN"
 
     run "${PROJECT_ROOT}/pmemtester" \
-        --percent 1 \
+        --size 64M \
         --iterations 1 \
         --stressapptest on \
         --stressapptest-seconds 1 \
@@ -60,7 +63,7 @@ teardown() {
     [[ -x "$STRESSAPPTEST_BIN" ]] || skip "stressapptest not found at $STRESSAPPTEST_BIN"
 
     run "${PROJECT_ROOT}/pmemtester" \
-        --percent 1 \
+        --size 64M \
         --iterations 1 \
         --stressapptest on \
         --stressapptest-seconds 1 \
@@ -90,7 +93,7 @@ WRAPPER
 
     local pmem_output
     pmem_output="$("${PROJECT_ROOT}/pmemtester" \
-        --percent 1 \
+        --size 16M \
         --iterations 1 \
         --stressapptest off \
         --memtester-dir "$wrapper_dir" \
@@ -136,7 +139,7 @@ WRAPPER
 
     local pmem_output
     pmem_output="$("${PROJECT_ROOT}/pmemtester" \
-        --percent 1 \
+        --size 64M \
         --iterations 1 \
         --stressapptest on \
         --stressapptest-seconds 1 \
@@ -162,7 +165,7 @@ WRAPPER
     [[ -x "$MEMTESTER_BIN" ]] || skip "memtester not found at $MEMTESTER_BIN"
 
     "${PROJECT_ROOT}/pmemtester" \
-        --percent 1 \
+        --size 16M \
         --iterations 1 \
         --stressapptest off \
         --log-dir "$TEST_LOG_DIR"

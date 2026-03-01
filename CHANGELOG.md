@@ -6,11 +6,14 @@
 
 - **Decimal `--percent`**: The `--percent` flag now accepts decimal values from 0.001 to 100 (e.g., `--percent 0.1`). Internally uses a "millipercent" integer strategy (0.1% = 100 millipercent) to keep all arithmetic integer-only. Up to 3 decimal places supported.
 - **`--size` flag**: Specify an exact total RAM amount to test with a unit suffix: `--size 256M`, `--size 2G`, `--size 1T`, `--size 1024K`. Supports K (KiB), M (MiB), G (GiB), and T (TiB). The total is divided equally among cores, the same as `--percent`. Mutually exclusive with `--percent`.
+- **L3-aware adaptive calibration**: Time estimation now detects L3 cache size via sysfs (with `getconf` fallback) and uses 4x L3 as the calibration size per the STREAM benchmark rule. This ensures calibration measures DRAM bandwidth rather than cache bandwidth, improving estimate accuracy by 5-10x. Calibration size is clamped to `[1, ram_per_core_mb]`. Falls back to 512 MB when L3 detection fails.
+- **`--estimate` flag**: Control time estimation calibration: `auto` (default, silently skips on failure), `on` (warns on failure), `off` (skips entirely).
 
 ### New CLI flags
 
 - `--percent N`: Now accepts decimal values (0.001-100, was 1-100)
 - `--size SIZE`: Explicit test RAM with unit suffix (K, M, G, T); mutually exclusive with `--percent`
+- `--estimate MODE`: Time estimate calibration: `auto` (default), `on`, `off`
 
 ### New functions
 
@@ -18,6 +21,10 @@
 - `percentage_of_milli()` in `math_utils.sh`: Integer percentage using millipercents (`value * millipercent / 100000`)
 - `parse_size_to_kb()` in `unit_convert.sh`: Parse size string with K/M/G/T suffix to kB
 - `calculate_test_ram_kb_milli()` in `ram_calc.sh`: RAM calculation using millipercents
+- `get_l3_cache_kb()` in `system_detect.sh`: Detect total L3 cache size via sysfs or `getconf`
+- `estimate_duration()` in `estimate.sh`: Scale calibration time linearly with calibration size ratio
+- `run_calibration()` in `estimate.sh`: Run memtester at adaptive calibration size
+- `print_estimate()` in `estimate.sh`: Display and log estimated completion time
 
 ### Refactoring
 

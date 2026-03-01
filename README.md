@@ -144,6 +144,7 @@ Options:
   --stressapptest MODE     stressapptest pass: auto (default), on, off
   --stressapptest-seconds N  stressapptest duration (0 = use memtester time, default: 0)
   --stressapptest-dir DIR  Directory containing stressapptest binary (default: /usr/local/bin)
+  --estimate MODE          Time estimate calibration: auto (default), on, off
   --version                Show version
   --help                   Show this help message
 ```
@@ -241,20 +242,40 @@ This binds both the CPU threads and memory allocation to the specified NUMA node
 
 **Note:** `--percent 90` in this case applies to the available memory on that NUMA node, not the whole system. Check per-node memory with `numactl --hardware`.
 
-### Estimating test duration
+### Time estimation
 
-A full 90% RAM test can take hours. To estimate the duration without committing to a full run, test 1% of available RAM and multiply by 90:
+pmemtester automatically estimates completion time before starting the main test. It runs a short calibration pass and scales linearly:
+
+```text
+Estimated completion: ~2h 15m (ETA: 2026-03-01 21:30:00)
+```
+
+The calibration size is chosen adaptively based on L3 cache size: **4x the L3 cache** (per the STREAM benchmark's established rule) to ensure the calibration measures DRAM bandwidth rather than cache bandwidth. L3 is detected via sysfs (`/sys/devices/system/cpu/cpu0/cache/`), with `getconf LEVEL3_CACHE_SIZE` as fallback. If both fail, a 512 MB default is used. The calibration size is clamped to never exceed the actual per-core test size.
+
+| L3 cache | Calibration size | Example hardware |
+|----------|-----------------|-----------------|
+| 3 MB | 12 MB | Consumer desktop |
+| 16 MB | 64 MB | Mainstream server |
+| 96 MB | 384 MB | AMD EPYC |
+
+Control estimation with `--estimate`:
+
+| Mode | Behaviour |
+|------|-----------|
+| `auto` (default) | Run calibration; silently skip estimate on failure |
+| `on` | Run calibration; warn on failure |
+| `off` | Skip calibration entirely |
+
+For manual estimation without built-in calibration, test a small percentage and multiply:
 
 ```bash
-# Quick 1% timing run
-sudo pmemtester --percent 1 --stressapptest off
+# Quick 1% timing run (memtester-only)
+sudo pmemtester --percent 1 --stressapptest off --estimate off
 # If this takes 80 seconds, a full 90% run ≈ 80 × 90 = 7200 seconds (2 hours)
 # With stressapptest (default), double it: ≈ 4 hours total
 ```
 
-memtester's execution time scales linearly with RAM size (it performs a fixed set of test patterns per byte), so 1% of RAM takes approximately 1/90th the time of 90%. Use `--stressapptest off` for the timing run to measure only the memtester phase; the stressapptest phase duration defaults to matching the memtester phase, so double the estimate for a full two-phase run.
-
-This is useful for capacity planning on unfamiliar hardware where you don't know how long memtester takes per gigabyte.
+memtester's execution time scales linearly with RAM size (it performs a fixed set of test patterns per byte), so 1% of RAM takes approximately 1/90th the time of 90%.
 
 ## stressapptest Second Pass
 
