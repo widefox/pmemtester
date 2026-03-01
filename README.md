@@ -271,7 +271,7 @@ This binds both the CPU threads and memory allocation to the specified NUMA node
 pmemtester automatically estimates completion time before starting the main test. It runs a short calibration pass and scales linearly:
 
 ```text
-Estimated completion: ~2h 15m (ETA: 2026-03-01 21:30:00)
+Estimated Phase 1 completion: ~2h 15m (ETA: 2026-03-01 21:30:00)
 ```
 
 The calibration size is chosen adaptively based on L3 cache size: **4x the L3 cache** (per the STREAM benchmark's established rule) to ensure the calibration measures DRAM bandwidth rather than cache bandwidth. L3 is detected via sysfs (`/sys/devices/system/cpu/cpu0/cache/`), with `getconf LEVEL3_CACHE_SIZE` as fallback. If both fail, a 512 MB default is used. The calibration size is clamped to never exceed the actual per-core test size.
@@ -440,7 +440,7 @@ pmemtester creates a log directory at `/tmp/pmemtester.<PID>/` (or `--log-dir`):
 [2026-02-15 11:00:02] [INFO] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
 [2026-02-15 11:00:02] [INFO] EDAC after Phase 1: no errors detected
 [2026-02-15 11:00:02] [INFO] Phase 2 (stressapptest) started: 230400MB, 7202s
-[2026-02-15 11:00:02] [INFO] Phase 2 ETA: 2026-02-15 13:00:04 (120m 2s)
+[2026-02-15 11:00:02] [INFO] Estimated Phase 2 completion: ~120m 2s (ETA: 2026-02-15 13:00:04)
 [2026-02-15 11:00:02] [INFO] Starting stressapptest: 230400MB, 7202s
 [2026-02-15 13:00:04] [INFO] stressapptest PASSED
 [2026-02-15 13:00:04] [INFO] Phase 2 (stressapptest) finished: PASSED (120m 2s)
@@ -461,7 +461,7 @@ $ sudo pmemtester --percent 90 --log-dir /tmp/memtest-run
 [2026-02-15 11:00:02] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
 [2026-02-15 11:00:02] EDAC after Phase 1: no errors detected
 [2026-02-15 11:00:02] Phase 2 (stressapptest) started: 230400MB, 7202s
-[2026-02-15 11:00:02] Phase 2 ETA: 2026-02-15 13:00:04 (120m 2s)
+[2026-02-15 11:00:02] Estimated Phase 2 completion: ~120m 2s (ETA: 2026-02-15 13:00:04)
 [2026-02-15 13:00:04] Phase 2 (stressapptest) finished: PASSED (120m 2s)
 [2026-02-15 13:00:04] Total duration: 240m 4s
 PASS
@@ -532,7 +532,7 @@ $ sudo pmemtester --percent 90
 [2026-02-15 11:00:02] Phase 1 (memtester) finished: all 48 instances passed (120m 2s)
 [2026-02-15 11:00:02] EDAC after Phase 1: no errors detected
 [2026-02-15 11:00:02] Phase 2 (stressapptest) started: 230400MB, 7202s
-[2026-02-15 11:00:02] Phase 2 ETA: 2026-02-15 13:00:04 (120m 2s)
+[2026-02-15 11:00:02] Estimated Phase 2 completion: ~120m 2s (ETA: 2026-02-15 13:00:04)
 [2026-02-15 12:34:56] Phase 2 (stressapptest) finished: FAILED (94m 54s)
 [2026-02-15 12:34:56] Total duration: 214m 56s
 FAIL (stressapptest)

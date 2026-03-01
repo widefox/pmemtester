@@ -24,7 +24,8 @@
 - `get_l3_cache_kb()` in `system_detect.sh`: Detect total L3 cache size via sysfs or `getconf`
 - `estimate_duration()` in `estimate.sh`: Scale calibration time linearly with calibration size ratio
 - `run_calibration()` in `estimate.sh`: Run memtester at adaptive calibration size
-- `print_estimate()` in `estimate.sh`: Display and log estimated completion time
+- `print_phase_estimate()` in `estimate.sh`: Display and log estimated completion time with phase label
+- `print_estimate()` in `estimate.sh`: Backward-compatible wrapper (no phase label)
 
 ### Refactoring
 

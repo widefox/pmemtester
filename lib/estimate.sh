@@ -29,8 +29,16 @@ run_calibration() {
     echo "$elapsed"
 }
 
-# print_estimate: display and log estimated completion time
+# print_phase_estimate: display and log estimated completion time for a named phase
 # Uses format_duration and format_eta from timing.sh, print_status from timing.sh
+# Usage: print_phase_estimate <phase_label> <estimated_seconds> <log_dir>
+print_phase_estimate() {
+    local phase="$1" est_secs="$2" log_dir="$3"
+    print_status "Estimated ${phase} completion: ~$(format_duration "$est_secs") (ETA: $(format_eta "$est_secs"))" "$log_dir"
+}
+
+# print_estimate: display and log estimated completion time (no phase label)
+# Backward-compatible wrapper. Callers should prefer print_phase_estimate.
 # Usage: print_estimate <estimated_seconds> <log_dir>
 print_estimate() {
     local est_secs="$1" log_dir="$2"

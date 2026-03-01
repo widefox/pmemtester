@@ -96,7 +96,7 @@ main() {
         if [[ "$cal_ok" -eq 1 ]]; then
             local est_secs
             est_secs="$(estimate_duration "$cal_secs" "$calibration_mb" "$ram_per_core_mb" "$ITERATIONS")"
-            print_estimate "$est_secs" "$log_dir"
+            print_phase_estimate "Phase 1" "$est_secs" "$log_dir"
         elif [[ "$ESTIMATE_MODE" == "on" ]]; then
             print_status "WARNING: calibration failed, time estimate unavailable" "$log_dir"
         fi
@@ -148,7 +148,7 @@ main() {
                 fi
             fi
             print_status "Phase 2 (stressapptest) started: ${total_mb}MB, ${sat_seconds}s" "$log_dir"
-            print_status "Phase 2 ETA: $(format_eta "$sat_seconds") ($(format_duration "$sat_seconds"))" "$log_dir"
+            print_phase_estimate "Phase 2" "$sat_seconds" "$log_dir"
             local phase2_start=$SECONDS
             run_stressapptest "$stressapptest_path" "$sat_seconds" "$total_mb" "$log_dir" || stressapptest_result=1
             local phase2_elapsed=$(( SECONDS - phase2_start ))

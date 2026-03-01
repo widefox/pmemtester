@@ -833,7 +833,7 @@ MOCK
     assert_success
     assert_output --partial "Phase 2"
     assert_output --partial "started"
-    assert_output --partial "ETA"
+    assert_output --partial "Estimated Phase 2 completion"
 }
 
 @test "full run prints Phase 2 finished with duration" {
@@ -893,7 +893,7 @@ MOCK
         --stressapptest-seconds 42 \
         --stressapptest-dir "$sat_dir"
     assert_success
-    assert_output --partial "ETA"
+    assert_output --partial "Estimated Phase 2 completion"
 }
 
 @test "full run intermediate EDAC creates mid snapshot files" {
@@ -1355,7 +1355,7 @@ MOCK
         --log-dir "$TEST_LOG_DIR" \
         $TEST_STRESSAPPTEST_OFF
     assert_success
-    assert_output --partial "Estimated completion"
+    assert_output --partial "Estimated Phase 1 completion"
 }
 
 @test "full run --estimate off skips estimate" {
@@ -1365,7 +1365,7 @@ MOCK
         --estimate off \
         $TEST_STRESSAPPTEST_OFF
     assert_success
-    refute_output --partial "Estimated completion"
+    refute_output --partial "Estimated Phase 1 completion"
 }
 
 @test "full run --estimate on shows estimate" {
@@ -1375,7 +1375,7 @@ MOCK
         --estimate on \
         $TEST_STRESSAPPTEST_OFF
     assert_success
-    assert_output --partial "Estimated completion"
+    assert_output --partial "Estimated Phase 1 completion"
 }
 
 @test "full run estimate auto silently skips on calibration failure" {
@@ -1398,7 +1398,7 @@ MOCK
         --estimate auto \
         $TEST_STRESSAPPTEST_OFF
     assert_success
-    refute_output --partial "Estimated completion"
+    refute_output --partial "Estimated Phase 1 completion"
     assert_output --partial "PASS"
 }
 

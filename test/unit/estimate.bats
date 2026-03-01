@@ -186,3 +186,41 @@ setup() {
 
     rm -rf "$log_dir"
 }
+
+# --- print_phase_estimate tests ---
+
+@test "print_phase_estimate shows phase label in output" {
+    local log_dir
+    log_dir="$(mktemp -d)"
+    : > "${log_dir}/master.log"
+
+    run print_phase_estimate "Phase 1" 120 "$log_dir"
+    assert_success
+    assert_output --partial "Estimated Phase 1 completion"
+
+    rm -rf "$log_dir"
+}
+
+@test "print_phase_estimate shows Phase 2 label" {
+    local log_dir
+    log_dir="$(mktemp -d)"
+    : > "${log_dir}/master.log"
+
+    run print_phase_estimate "Phase 2" 60 "$log_dir"
+    assert_success
+    assert_output --partial "Estimated Phase 2 completion"
+    assert_output --partial "ETA:"
+
+    rm -rf "$log_dir"
+}
+
+@test "print_phase_estimate writes to master.log" {
+    local log_dir
+    log_dir="$(mktemp -d)"
+    : > "${log_dir}/master.log"
+
+    print_phase_estimate "Phase 1" 90 "$log_dir"
+    grep -q "Estimated Phase 1 completion" "${log_dir}/master.log"
+
+    rm -rf "$log_dir"
+}
