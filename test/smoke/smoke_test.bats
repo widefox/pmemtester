@@ -2,8 +2,8 @@
 # These require real binaries installed and take 10-30s to complete.
 # Run with: make test-smoke
 #
-# Use --size with fixed amounts rather than --percent to ensure predictable
-# behaviour regardless of host RAM. stressapptest needs ~64M+ to initialize.
+# Uses L3-aware calibration size (4x L3 cache) to ensure DRAM-bound testing
+# on any hardware. The same logic pmemtester uses internally for time estimates.
 
 MEMTESTER_BIN="/usr/local/bin/memtester"
 STRESSAPPTEST_BIN="/usr/local/bin/stressapptest"
@@ -12,6 +12,22 @@ setup() {
     load '../test_helper/common_setup'
     _common_setup
     TEST_LOG_DIR="$(mktemp -d)"
+
+    # Compute L3-aware smoke test size (same logic as pmemtester calibration)
+    source "${PROJECT_ROOT}/lib/system_detect.sh"
+    local l3_kb cal_per_core_mb core_count
+    if l3_kb="$(get_l3_cache_kb)"; then
+        cal_per_core_mb=$(( l3_kb * 4 / 1024 ))
+    else
+        cal_per_core_mb=512
+    fi
+    # Floor: at least 12 MB per core (smallest useful DRAM-bound size)
+    if [[ "$cal_per_core_mb" -lt 12 ]]; then
+        cal_per_core_mb=12
+    fi
+    core_count="$(get_core_count)"
+    # --size is total across all cores
+    SMOKE_SIZE="$(( cal_per_core_mb * core_count ))M"
 }
 
 teardown() {
@@ -24,7 +40,7 @@ teardown() {
     [[ -x "$MEMTESTER_BIN" ]] || skip "memtester not found at $MEMTESTER_BIN"
 
     run "${PROJECT_ROOT}/pmemtester" \
-        --size 16M \
+        --size "$SMOKE_SIZE" \
         --iterations 1 \
         --stressapptest off \
         --log-dir "$TEST_LOG_DIR"
@@ -45,7 +61,7 @@ teardown() {
     [[ -x "$STRESSAPPTEST_BIN" ]] || skip "stressapptest not found at $STRESSAPPTEST_BIN"
 
     run "${PROJECT_ROOT}/pmemtester" \
-        --size 64M \
+        --size "$SMOKE_SIZE" \
         --iterations 1 \
         --stressapptest on \
         --stressapptest-seconds 1 \
@@ -63,7 +79,7 @@ teardown() {
     [[ -x "$STRESSAPPTEST_BIN" ]] || skip "stressapptest not found at $STRESSAPPTEST_BIN"
 
     run "${PROJECT_ROOT}/pmemtester" \
-        --size 64M \
+        --size "$SMOKE_SIZE" \
         --iterations 1 \
         --stressapptest on \
         --stressapptest-seconds 1 \
@@ -93,7 +109,7 @@ WRAPPER
 
     local pmem_output
     pmem_output="$("${PROJECT_ROOT}/pmemtester" \
-        --size 16M \
+        --size "$SMOKE_SIZE" \
         --iterations 1 \
         --stressapptest off \
         --memtester-dir "$wrapper_dir" \
@@ -139,7 +155,7 @@ WRAPPER
 
     local pmem_output
     pmem_output="$("${PROJECT_ROOT}/pmemtester" \
-        --size 64M \
+        --size "$SMOKE_SIZE" \
         --iterations 1 \
         --stressapptest on \
         --stressapptest-seconds 1 \
@@ -165,7 +181,7 @@ WRAPPER
     [[ -x "$MEMTESTER_BIN" ]] || skip "memtester not found at $MEMTESTER_BIN"
 
     "${PROJECT_ROOT}/pmemtester" \
-        --size 16M \
+        --size "$SMOKE_SIZE" \
         --iterations 1 \
         --stressapptest off \
         --log-dir "$TEST_LOG_DIR"
@@ -176,7 +192,6 @@ WRAPPER
     grep -q "PASS" "${TEST_LOG_DIR}/master.log"
 
     # Thread logs should exist for each core
-    source "${PROJECT_ROOT}/lib/system_detect.sh"
     local core_count
     core_count="$(get_core_count)"
 
