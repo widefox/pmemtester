@@ -202,3 +202,21 @@ WRAPPER
         [[ -s "${TEST_LOG_DIR}/thread_${i}.log" ]]
     done
 }
+
+# --- Test 7: --percent code path end-to-end ---
+
+@test "smoke: --percent 1 both phases pass" {
+    [[ -x "$MEMTESTER_BIN" ]] || skip "memtester not found at $MEMTESTER_BIN"
+    [[ -x "$STRESSAPPTEST_BIN" ]] || skip "stressapptest not found at $STRESSAPPTEST_BIN"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --percent 1 \
+        --iterations 1 \
+        --stressapptest on \
+        --stressapptest-seconds 1 \
+        --log-dir "$TEST_LOG_DIR"
+    assert_success
+    assert_output --partial "Phase 1"
+    assert_output --partial "Phase 2"
+    assert_output --partial "PASS"
+}
