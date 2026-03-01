@@ -484,3 +484,63 @@ setup() {
     assert_success
     assert_output --partial "0.001-100"
 }
+
+# --- --estimate flag tests ---
+
+@test "parse_args default ESTIMATE_MODE is auto" {
+    parse_args
+    [[ "$ESTIMATE_MODE" == "auto" ]]
+}
+
+@test "parse_args --estimate on" {
+    parse_args --estimate on
+    [[ "$ESTIMATE_MODE" == "on" ]]
+}
+
+@test "parse_args --estimate off" {
+    parse_args --estimate off
+    [[ "$ESTIMATE_MODE" == "off" ]]
+}
+
+@test "parse_args --estimate auto" {
+    parse_args --estimate auto
+    [[ "$ESTIMATE_MODE" == "auto" ]]
+}
+
+@test "parse_args --estimate combined with other flags" {
+    parse_args --percent 80 --estimate on --iterations 3
+    [[ "$ESTIMATE_MODE" == "on" ]]
+    [[ "$PERCENT" == "80" ]]
+    [[ "$ITERATIONS" == "3" ]]
+}
+
+@test "validate_args invalid estimate mode fails" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 ESTIMATE_MODE=bogus
+    run validate_args
+    assert_failure
+    assert_output --partial "estimate"
+}
+
+@test "validate_args estimate auto passes" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 ESTIMATE_MODE=auto
+    run validate_args
+    assert_success
+}
+
+@test "validate_args estimate on passes" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 ESTIMATE_MODE=on
+    run validate_args
+    assert_success
+}
+
+@test "validate_args estimate off passes" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 ESTIMATE_MODE=off
+    run validate_args
+    assert_success
+}
+
+@test "usage includes --estimate" {
+    run usage
+    assert_success
+    assert_output --partial "--estimate"
+}

@@ -27,6 +27,8 @@ STRESSAPPTEST_SECONDS=0
 SIZE=""
 # shellcheck disable=SC2034
 PERCENT_SET=0
+# shellcheck disable=SC2034
+ESTIMATE_MODE="auto"
 
 # usage: print help text
 usage() {
@@ -45,6 +47,7 @@ Options:
   --stressapptest MODE  stressapptest pass: auto (default), on, off
   --stressapptest-seconds N  stressapptest duration (0 = use memtester time, default: 0)
   --stressapptest-dir DIR  Directory containing stressapptest binary (default: ${DEFAULT_STRESSAPPTEST_DIR})
+  --estimate MODE     Time estimate calibration: auto (default), on, off
   --version           Show version
   --help              Show this help message
 EOF
@@ -66,6 +69,7 @@ parse_args() {
             --stressapptest) STRESSAPPTEST_MODE="$2"; shift 2 ;;
             --stressapptest-seconds) STRESSAPPTEST_SECONDS="$2"; shift 2 ;;
             --stressapptest-dir) STRESSAPPTEST_DIR="$2"; shift 2 ;;
+            --estimate) ESTIMATE_MODE="$2"; shift 2 ;;
             --version)    echo "pmemtester ${pmemtester_version:-unknown}"; exit 0 ;;
             --help)       usage; exit 0 ;;
             *)
@@ -133,5 +137,12 @@ validate_args() {
         echo "ERROR: --stressapptest-seconds must be >= 0 (got ${STRESSAPPTEST_SECONDS})" >&2
         return 1
     fi
+    case "$ESTIMATE_MODE" in
+        auto|on|off) : ;;
+        *)
+            echo "ERROR: --estimate must be auto, on, or off (got ${ESTIMATE_MODE})" >&2
+            return 1
+            ;;
+    esac
     return 0
 }

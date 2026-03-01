@@ -32,6 +32,12 @@ MOCK
 
     # Default: no stressapptest (auto mode finds nothing, skips)
     export TEST_STRESSAPPTEST_OFF="--stressapptest-dir ${TEST_LOG_DIR}/no_sat_bin"
+
+    # Use 3MB L3 cache fixture for deterministic calibration size (4x3MB = 12MB)
+    export SYS_CPU_BASE="${FIXTURE_DIR}/sys_cpu_cache_3mb"
+
+    # Disable calibration for tests with side-effect memtester mocks
+    export TEST_ESTIMATE_OFF="--estimate off"
 }
 
 teardown() {
@@ -96,7 +102,7 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     assert_failure
     assert_output --partial "FAIL"
 }
@@ -164,7 +170,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --allow-ce \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     assert_success
     assert_output --partial "PASS"
     assert_output --partial "WARNING"
@@ -189,7 +195,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --allow-ce \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     assert_failure
     assert_output --partial "FAIL"
 }
@@ -214,7 +220,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --allow-ce \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     assert_failure
     assert_output --partial "FAIL"
 }
@@ -237,7 +243,7 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     assert_failure
     assert_output --partial "FAIL"
 }
@@ -261,7 +267,7 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$log_dir" \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     # Check master.log contains CE classification
     [[ -f "${log_dir}/master.log" ]]
     grep -q "ce_only" "${log_dir}/master.log"
@@ -286,7 +292,7 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$log_dir" \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     # Check master.log contains UE classification
     [[ -f "${log_dir}/master.log" ]]
     grep -q "ue_only" "${log_dir}/master.log"
@@ -366,7 +372,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --color off \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     assert_failure
     assert_output --partial "FAIL"
     assert_output --partial "EDAC"
@@ -805,7 +811,7 @@ MOCK
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     assert_output --partial "correctable errors"
 }
 
@@ -992,7 +998,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --percent 90 \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
 
     # Each of 2 cores should get 5400M
     [[ -f "$PMEMTESTER_ARG_LOG" ]]
@@ -1020,7 +1026,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --percent 50 \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
 
     while IFS= read -r arg; do
         [[ "$arg" == "3000M" ]]
@@ -1042,7 +1048,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --percent 90 --ram-type total \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
 
     while IFS= read -r arg; do
         [[ "$arg" == "7200M" ]]
@@ -1068,7 +1074,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --percent 90 \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
 
     local line_count
     line_count=$(wc -l < "$PMEMTESTER_ARG_LOG")
@@ -1179,7 +1185,8 @@ MOCK
         --percent 90 \
         --stressapptest on \
         --stressapptest-seconds 1 \
-        --stressapptest-dir "$sat_dir"
+        --stressapptest-dir "$sat_dir" \
+        $TEST_ESTIMATE_OFF
 
     # Extract per-core MB from memtester arg (strip trailing M)
     local per_core_mb
@@ -1233,7 +1240,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --percent 0.1 \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
 
     while IFS= read -r arg; do
         [[ "$arg" == "6M" ]]
@@ -1274,7 +1281,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --size 256M \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
 
     local line_count
     line_count=$(wc -l < "$PMEMTESTER_ARG_LOG")
@@ -1340,6 +1347,150 @@ MOCK
     assert_output --partial "PASS"
 }
 
+# --- Time estimation integration tests ---
+
+@test "full run shows time estimate by default" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "Estimated completion"
+}
+
+@test "full run --estimate off skips estimate" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --estimate off \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    refute_output --partial "Estimated completion"
+}
+
+@test "full run --estimate on shows estimate" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --estimate on \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    assert_output --partial "Estimated completion"
+}
+
+@test "full run estimate auto silently skips on calibration failure" {
+    # Create a memtester mock that fails only for calibration (12M with 3MB L3 fixture)
+    # but passes for the real run
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+if [[ "$1" == "12M" ]] && [[ "$2" == "1" ]]; then
+    echo "calibration fail" >&2
+    exit 1
+fi
+echo "memtester pass"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --estimate auto \
+        $TEST_STRESSAPPTEST_OFF
+    assert_success
+    refute_output --partial "Estimated completion"
+    assert_output --partial "PASS"
+}
+
+@test "full run estimate creates calibration.log" {
+    local log_dir="${TEST_LOG_DIR}/logs_cal"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        $TEST_STRESSAPPTEST_OFF
+    [[ -f "${log_dir}/calibration.log" ]]
+}
+
+@test "full run estimate uses L3-based calibration size" {
+    # With 3MB L3 fixture, calibration_mb = 3072*4/1024 = 12
+    # Mock memtester records its first invocation args
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+if [[ ! -f "${0%/*}/first_call.txt" ]]; then
+    echo "$@" > "${0%/*}/first_call.txt"
+fi
+echo "memtester pass"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+
+    # First call should be calibration: 12M 1
+    local first_args
+    first_args="$(cat "${TEST_MEMTESTER_DIR}/first_call.txt")"
+    [[ "$first_args" == "12M 1" ]]
+}
+
+@test "full run estimate falls back on L3 detection failure" {
+    # Point SYS_CPU_BASE at nonexistent dir and mock getconf to fail
+    export SYS_CPU_BASE="${TEST_LOG_DIR}/nonexistent_sysfs"
+    create_mock getconf 'exit 1'
+
+    # Mock memtester records its first invocation args
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+if [[ ! -f "${0%/*}/first_call.txt" ]]; then
+    echo "$@" > "${0%/*}/first_call.txt"
+fi
+echo "memtester pass"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        $TEST_STRESSAPPTEST_OFF
+
+    # Fallback calibration is 512MB, but clamped to ram_per_core_mb
+    # With 16GB total, 90% avail (~12GB avail), 2 cores → ~6000MB per core
+    # 512 < 6000, so calibration_mb = 512
+    local first_args
+    first_args="$(cat "${TEST_MEMTESTER_DIR}/first_call.txt")"
+    [[ "$first_args" == "512M 1" ]]
+}
+
+@test "full run estimate calibration clamped to ram_per_core_mb" {
+    # Use 96MB L3 fixture: calibration_mb = 98304*4/1024 = 384
+    # But with --size 256M (2 cores → 128M per core), clamp to 128
+    export SYS_CPU_BASE="${FIXTURE_DIR}/sys_cpu_cache_96mb"
+
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+if [[ ! -f "${0%/*}/first_call.txt" ]]; then
+    echo "$@" > "${0%/*}/first_call.txt"
+fi
+echo "memtester pass"
+exit 0
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --size 256M \
+        $TEST_STRESSAPPTEST_OFF
+
+    # 256M / 2 cores = 128M per core; 384MB calibration clamped to 128
+    local first_args
+    first_args="$(cat "${TEST_MEMTESTER_DIR}/first_call.txt")"
+    [[ "$first_args" == "128M 1" ]]
+}
+
 @test "full run CE with --allow-ce --color on shows yellow WARNING" {
     local edac_fixture="${TEST_LOG_DIR}/edac_ce_warn"
     mkdir -p "${edac_fixture}/mc/mc0/csrow0"
@@ -1359,7 +1510,7 @@ MOCK
         --memtester-dir "$TEST_MEMTESTER_DIR" \
         --log-dir "$TEST_LOG_DIR" \
         --allow-ce --color on \
-        $TEST_STRESSAPPTEST_OFF
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
     assert_success
     assert_output --partial "PASS"
     assert_output --partial $'\033[33m'

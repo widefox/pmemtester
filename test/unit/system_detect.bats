@@ -102,3 +102,58 @@ teardown() {
     assert_success
     assert_output "8"
 }
+
+# --- get_l3_cache_kb tests ---
+
+@test "get_l3_cache_kb reads 3MB L3 from sysfs" {
+    export SYS_CPU_BASE="${FIXTURE_DIR}/sys_cpu_cache_3mb"
+    run get_l3_cache_kb
+    assert_success
+    assert_output "3072"
+}
+
+@test "get_l3_cache_kb reads 96MB L3 from sysfs" {
+    export SYS_CPU_BASE="${FIXTURE_DIR}/sys_cpu_cache_96mb"
+    run get_l3_cache_kb
+    assert_success
+    assert_output "98304"
+}
+
+@test "get_l3_cache_kb no L3 in sysfs falls back to getconf" {
+    export SYS_CPU_BASE="${FIXTURE_DIR}/sys_cpu_cache_no_l3"
+    # getconf returns bytes; 6291456 bytes = 6144 kB
+    create_mock getconf 'echo "6291456"'
+    run get_l3_cache_kb
+    assert_success
+    assert_output "6144"
+}
+
+@test "get_l3_cache_kb no L3 and getconf fails returns error" {
+    export SYS_CPU_BASE="${FIXTURE_DIR}/sys_cpu_cache_no_l3"
+    create_mock getconf 'exit 1'
+    run get_l3_cache_kb
+    assert_failure
+}
+
+@test "get_l3_cache_kb no L3 and getconf returns 0 returns error" {
+    export SYS_CPU_BASE="${FIXTURE_DIR}/sys_cpu_cache_no_l3"
+    create_mock getconf 'echo "0"'
+    run get_l3_cache_kb
+    assert_failure
+}
+
+@test "get_l3_cache_kb finds L3 by level not by index number" {
+    # L3 at index2 instead of index3
+    export SYS_CPU_BASE="${FIXTURE_DIR}/sys_cpu_cache_l3_at_index2"
+    run get_l3_cache_kb
+    assert_success
+    assert_output "6144"
+}
+
+@test "get_l3_cache_kb sysfs directory missing falls back to getconf" {
+    export SYS_CPU_BASE="${FIXTURE_DIR}/nonexistent_dir"
+    create_mock getconf 'echo "3145728"'
+    run get_l3_cache_kb
+    assert_success
+    assert_output "3072"
+}

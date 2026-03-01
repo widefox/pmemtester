@@ -72,6 +72,36 @@ main() {
         print_status "stressapptest not found (Phase 2 will be skipped)" "$log_dir"
     fi
 
+    # Time estimation (calibration)
+    if [[ "$ESTIMATE_MODE" != "off" ]]; then
+        # Adaptive calibration size: 4x L3 cache (STREAM rule) to escape cache
+        local l3_kb calibration_mb
+        if l3_kb="$(get_l3_cache_kb)"; then
+            calibration_mb=$(( l3_kb * 4 / 1024 ))
+        else
+            calibration_mb=512
+        fi
+        if [[ "$calibration_mb" -gt "$ram_per_core_mb" ]]; then
+            calibration_mb="$ram_per_core_mb"
+        fi
+        if [[ "$calibration_mb" -lt 1 ]]; then
+            calibration_mb=1
+        fi
+
+        local cal_secs=0
+        local cal_ok=0
+        if cal_secs="$(run_calibration "$memtester_path" "$log_dir" "$calibration_mb")"; then
+            cal_ok=1
+        fi
+        if [[ "$cal_ok" -eq 1 ]]; then
+            local est_secs
+            est_secs="$(estimate_duration "$cal_secs" "$calibration_mb" "$ram_per_core_mb" "$ITERATIONS")"
+            print_estimate "$est_secs" "$log_dir"
+        elif [[ "$ESTIMATE_MODE" == "on" ]]; then
+            print_status "WARNING: calibration failed, time estimate unavailable" "$log_dir"
+        fi
+    fi
+
     local total_mb=$(( ram_per_core_mb * core_count ))
     local run_start_seconds=$SECONDS
     print_status "pmemtester started: ${total_mb}MB across ${core_count} cores, ${ITERATIONS} iteration(s)" "$log_dir"
