@@ -20,6 +20,30 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester, stressapptest, and EDAC results
 
+## Platform Support
+
+pmemtester runs on any Linux platform where memtester (and optionally stressapptest) runs.
+
+**memtester** is architecture-agnostic: pure C with no assembly, no `#ifdef` for specific architectures. It adapts to 32-bit or 64-bit platforms automatically via `ULONG_MAX` detection. It builds and runs on any POSIX system with a C compiler. Debian alone packages it for 22+ architectures.
+
+**stressapptest** has optimised assembly paths for specific architectures, with a generic C fallback for others. The fallback compiles with a `#warning` and lacks architecture-tuned cache flush and SIMD memory copy routines, which may reduce test intensity.
+
+| Architecture | memtester | stressapptest | stressapptest optimisations |
+|---|---|---|---|
+| x86-64 | Yes | Yes (optimised) | SSE2 non-temporal stores, `clflush`, CPUID feature detection |
+| i686 (32-bit x86) | Yes | Yes (optimised) | SSE2, `clflush`, CPUID |
+| AArch64 (ARM 64-bit) | Yes | Yes (optimised) | NEON vector ops, `dc civac` cache flush, prefetch hints |
+| ARMv7-A (ARM 32-bit) | Yes | Yes (optimised) | NEON (if `__ARM_NEON__`), cache ops |
+| PowerPC | Yes | Yes (optimised) | `dcbf` cache flush, `mftb` timestamp |
+| MIPS | Yes | Yes (optimised) | Cache flush instructions |
+| LoongArch | Yes | Yes (optimised) | `ibar`/`dbar` barriers, cache flush |
+| RISC-V | Yes | Generic fallback | Compiles with `#warning`; no tuned assembly |
+| s390x | Yes | Generic fallback | Compiles with `#warning`; no tuned assembly |
+| SPARC | Yes | Generic fallback | Compiles with `#warning`; no tuned assembly |
+| Alpha, HPPA, m68k, SH, etc. | Yes | Generic fallback | Compiles with `#warning`; no tuned assembly |
+
+Sources: [memtester source: sizes.h](https://github.com/jnavila/memtester/blob/master/sizes.h), [stressapptest source: configure.ac, os.h, adler32memcpy.cc](https://github.com/stressapptest/stressapptest/tree/master/src).
+
 ## Installation
 
 ### Dependencies
