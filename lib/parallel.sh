@@ -7,6 +7,7 @@
 MEMTESTER_PIDS=()
 
 # STOP_ON_ERROR_TRIGGERED: set to "memtester" or "edac_ue" on early stop
+# shellcheck disable=SC2034
 STOP_ON_ERROR_TRIGGERED=""
 
 # kill_all_memtesters: send SIGTERM to all tracked PIDs and wait for exit
@@ -71,6 +72,7 @@ wait_and_collect() {
             MEMTESTER_FAIL_COUNT=$(( MEMTESTER_FAIL_COUNT + 1 ))
             failed=1
             if [[ "$stop_on_error" -eq 1 ]]; then
+                # shellcheck disable=SC2034
                 STOP_ON_ERROR_TRIGGERED="memtester"
                 kill_all_memtesters "$log_dir"
                 return 1
