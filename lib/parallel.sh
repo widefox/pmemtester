@@ -6,6 +6,23 @@
 # Array to track background PIDs
 MEMTESTER_PIDS=()
 
+# STOP_ON_ERROR_TRIGGERED: set to "memtester" or "edac_ue" on early stop
+STOP_ON_ERROR_TRIGGERED=""
+
+# kill_all_memtesters: send SIGTERM to all tracked PIDs and wait for exit
+# Usage: kill_all_memtesters <log_dir>
+kill_all_memtesters() {
+    local log_dir="$1"
+    local pid
+    for pid in "${MEMTESTER_PIDS[@]}"; do
+        kill -TERM "$pid" 2>/dev/null || true
+    done
+    for pid in "${MEMTESTER_PIDS[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
+    log_master "kill_all_memtesters: sent SIGTERM to ${#MEMTESTER_PIDS[@]} process(es)" "$log_dir"
+}
+
 # run_memtester_instance: run a single memtester and log output
 # Usage: run_memtester_instance <memtester_path> <size_arg> <iterations> <thread_id> <log_dir>
 run_memtester_instance() {

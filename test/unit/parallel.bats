@@ -85,3 +85,35 @@ teardown() {
     ! wait_and_collect "$TEST_LOG_DIR"
     [[ "$MEMTESTER_FAIL_COUNT" -eq 1 ]]
 }
+
+# --- kill_all_memtesters tests ---
+
+@test "kill_all_memtesters with empty PID list does nothing" {
+    MEMTESTER_PIDS=()
+    # Should not fail even with no PIDs
+    kill_all_memtesters "$TEST_LOG_DIR"
+}
+
+@test "kill_all_memtesters kills running processes" {
+    # Start a long-running background process
+    sleep 60 &
+    local pid=$!
+    MEMTESTER_PIDS=("$pid")
+
+    kill_all_memtesters "$TEST_LOG_DIR"
+
+    # Process should be gone
+    ! kill -0 "$pid" 2>/dev/null
+}
+
+@test "kill_all_memtesters waits for processes to exit" {
+    # A process that ignores SIGTERM briefly then exits
+    ( trap '' TERM; sleep 1 ) &
+    local pid=$!
+    MEMTESTER_PIDS=("$pid")
+
+    kill_all_memtesters "$TEST_LOG_DIR"
+
+    # After kill_all_memtesters returns, the PID must not be running
+    ! kill -0 "$pid" 2>/dev/null
+}
