@@ -266,6 +266,8 @@ This binds both the CPU threads and memory allocation to the specified NUMA node
 
 **Note:** `--percent 90` in this case applies to the available memory on that NUMA node, not the whole system. Check per-node memory with `numactl --hardware`.
 
+**CPU-less NUMA nodes:** On systems with HBM or CXL-attached memory (e.g., NVIDIA Grace Blackwell), some NUMA nodes have memory but no CPUs. You can still test them by borrowing CPUs from another node. See [FAQ: How do I test HBM or other memory on CPU-less NUMA nodes?](FAQ.md#how-do-i-test-hbm-or-other-memory-on-cpu-less-numa-nodes)
+
 ### Time estimation
 
 pmemtester automatically estimates completion time before starting the main test. It runs a short calibration pass and scales linearly:

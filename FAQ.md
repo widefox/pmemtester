@@ -471,6 +471,71 @@ On older systems using cgroups v1, the path is `/sys/fs/cgroup/cpuset/` and proc
 
 References: [numactl(8)](https://linux.die.net/man/8/numactl), [migratepages(8)](https://linux.die.net/man/8/migratepages), [cgroups v2 cpuset (kernel.org)](https://docs.kernel.org/admin-guide/cgroup-v2.html#cpuset-interface-files), [taskset(1)](https://linux.die.net/man/1/taskset).
 
+## How do I test HBM or other memory on CPU-less NUMA nodes?
+
+Some systems expose memory on NUMA nodes that have no local CPUs. Examples include:
+
+- **HBM (High Bandwidth Memory):** NVIDIA Grace Blackwell (GB200/GB300) places CPU cores on one NUMA node and HBM on separate NUMA nodes
+- **CXL-attached memory:** CXL 2.0+ Type 3 devices appear as CPU-less NUMA nodes
+- **GPU-attached memory:** Some configurations expose GPU HBM as a NUMA node accessible to the host
+
+pmemtester works on these nodes today using `numactl` to borrow CPUs from a node that has them while binding memory allocation to the CPU-less node.
+
+### Example: NVIDIA Grace Blackwell HBM
+
+On a Grace Blackwell system, `numactl --hardware` shows a topology like this (node numbers and sizes vary by SKU):
+
+```text
+available: 4 nodes (0-3)
+node 0 cpus: 0 1 2 3 ... 71
+node 0 size: 131072 MB
+node 1 cpus:
+node 1 size: 98304 MB
+node 2 cpus:
+node 2 size: 98304 MB
+node 3 cpus:
+node 3 size: 98304 MB
+```
+
+Node 0 has CPU cores and LPDDR5X memory. Nodes 1-3 have HBM3e memory but no CPUs.
+
+### Testing a single HBM node
+
+Borrow CPUs from node 0 and bind memory to the HBM node:
+
+```bash
+# Test HBM on NUMA node 1 using CPUs from node 0
+sudo numactl --cpunodebind=0 --membind=1 pmemtester --percent 90
+
+# Test HBM on NUMA node 2
+sudo numactl --cpunodebind=0 --membind=2 pmemtester --percent 90
+
+# Test HBM on NUMA node 3
+sudo numactl --cpunodebind=0 --membind=3 pmemtester --percent 90
+```
+
+The `--percent 90` applies to the available memory on the target node, not the whole system. Check per-node memory with `numactl --hardware`.
+
+### Testing all HBM nodes
+
+Today, run each node separately (as shown above). A future `--numa-node 1,2,3` flag would automate testing multiple nodes in a single command (see [TODO.md](TODO.md#3-numa-locality)).
+
+### Why test HBM separately?
+
+- **Smaller capacity per node:** Each HBM node is typically 96-192 GB, so individual runs finish faster than testing hundreds of GB in one pass
+- **Isolation:** Testing one HBM node at a time avoids competing for memory bandwidth across the HBM stack
+- **Targeted diagnostics:** If EDAC reports errors, per-node runs help narrow the fault to a specific HBM stack
+
+### EDAC on Grace Blackwell
+
+Grace Blackwell uses ARM64 RAS (Reliability, Availability, Serviceability) with EDAC_GHES (firmware-first error reporting). EDAC counters are system-wide, so errors from any memory (LPDDR5X or HBM) appear in the same sysfs counters. The EDAC limitation described in [TODO.md](TODO.md#1-edac-region-correlation) applies here: there is no automatic correlation between EDAC errors and the specific NUMA node under test.
+
+### See also
+
+- [Single-socket testing](README.md#single-socket-testing-on-a-multi-socket-server) in the README for standard NUMA-aware testing
+- [nv-swaptop](https://github.com/widefox/nv-swaptop) for Grace architecture memory detection and usage monitoring
+- [How do I evacuate a socket for dedicated memory testing?](#how-do-i-evacuate-a-socket-for-dedicated-memory-testing) for moving workloads off a NUMA node before testing
+
 ## Why not drop caches before running?
 
 `MemAvailable` in `/proc/meminfo` already accounts for reclaimable page cache and reclaimable slab (dentries/inodes) -- the kernel will evict these as needed when memtester allocates memory. Dropping caches (`echo 3 > /proc/sys/vm/drop_caches`) before running is unnecessary because the kernel reclaims clean cache pages on demand under allocation pressure. `MemAvailable` is deliberately conservative (it subtracts low watermarks and counts only half of reclaimable slab to account for fragmentation), so the actual reclaimable memory is slightly higher than the estimate -- but this works in pmemtester's favour, not against it. The practical outcome is the same whether you drop caches or not. Note that `drop_caches` only releases *clean* pages -- dirty pages (modified but not yet written to disk) are kept. If you did want to maximise free memory manually, you would need to run `sync` first to flush dirty pages to disk, converting them to clean pages that `drop_caches` can then release. But again, the kernel handles all of this automatically under allocation pressure, so neither `sync` nor `drop_caches` is needed before running pmemtester.

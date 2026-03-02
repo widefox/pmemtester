@@ -38,6 +38,7 @@ Document and potentially improve NUMA behaviour:
 - Memory allocation is not NUMA-aware -- the kernel's default policy (local allocation) means each process likely gets memory from its local node, but this is not guaranteed
 - For explicit per-node testing, users can wrap pmemtester with `numactl --cpunodebind=N --membind=N` (documented in README)
 - Consider adding a `--numa-node N` flag to constrain testing to a specific NUMA node natively
+- Support multiple NUMA nodes: `--numa-node 1,2,3` to test several nodes sequentially (or in parallel across borrowed CPU cores). Use case: Grace Blackwell HBM spans multiple CPU-less NUMA nodes; testing all HBM in one command avoids manual repetition. See [FAQ.md](FAQ.md#how-do-i-test-hbm-or-other-memory-on-cpu-less-numa-nodes) for the current manual workflow.
 - Consider adding a `--per-node` mode that tests each NUMA node sequentially and reports per-node results
 
 ## 4. Heterogeneous Cores
