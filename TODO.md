@@ -68,19 +68,7 @@ Pin each memtester instance to a specific physical core with `taskset` or `sched
 - Could use `lscpu -b -p=Socket,Core,CPU` to map physical cores to logical CPU IDs for pinning
 - Consider a `--pin` flag to enable pinning (off by default to avoid surprising users)
 
-## 7. Time Estimation
-
-Run a short calibration test at the start of every run to estimate completion time:
-
-- Before the main test, run memtester on a small sample (e.g., 0.1% of the requested RAM per thread) with logging disabled
-- Measure wall-clock time for the sample, then linearly scale to the full requested amount
-- Display the estimate before starting the real test (e.g., "Estimated completion: ~45 minutes")
-- memtester runtime scales roughly linearly with RAM size for a given iteration count, so naive scaling should be reasonable
-- Run by default (`--no-estimate` to skip), so users always see a time estimate upfront
-- The calibration run also serves as a quick sanity check that memtester works before committing to a long run
-- Consider caching calibration results per-host (MB/s throughput) to skip the sample on subsequent runs
-
-## 8. Sequential Rolling RAM Test
+## 7. Sequential Rolling RAM Test
 
 **Out of scope.** Physical memory addressing requires kernel-level cooperation (`move_pages()`, custom module walking `page_struct`). Userspace `mmap`/`malloc` + `mlock` provides no control over which physical frames are allocated, so freeing and reallocating cannot guarantee coverage of different physical memory.
 
@@ -94,7 +82,7 @@ memtester's `-p` flag (physical address mode via `/dev/mem`) was evaluated as an
 
 For exhaustive physical RAM testing, use a standalone boot-time tester (MemTest86, MemTest86+) where the tool has exclusive access to the full physical address space before the OS loads.
 
-## 9. Virtual-to-Physical Address Translation for DIMM-Level Failure Correlation
+## 8. Virtual-to-Physical Address Translation for DIMM-Level Failure Correlation
 
 Use `/proc/<pid>/pagemap` to translate virtual addresses to physical page frame numbers, enabling correlation between memtester failures and specific DIMMs via EDAC physical address reporting.
 
@@ -120,7 +108,7 @@ Considerations:
 - In Bash, reading the binary pagemap format requires `od` or `xxd` plus arithmetic; a C helper or Python script may be more practical
 - Could be gated behind a `--show-physical` flag (off by default, since it requires elevated privileges)
 
-## 10. Single Binary: Port to C and Integrate with memtester
+## 9. Single Binary: Port to C and Integrate with memtester
 
 Rewrite pmemtester as a C program that integrates memtester's testing logic directly, producing a single `pmemtester` executable with no external dependency on the `memtester` binary.
 
@@ -145,7 +133,7 @@ Considerations:
 - Cross-platform portability: memtester supports non-Linux systems; pmemtester is Linux-only (EDAC dependency)
 - Build system: autotools or meson, with the test suite ported from bats to a C test framework or kept as integration tests
 
-## 11. Stop on First Error
+## 10. Stop on First Error
 
 Add a `--stop-on-error` flag that terminates the run immediately when any error is detected, rather than waiting for all memtester instances to complete.
 
@@ -169,6 +157,6 @@ Considerations:
 - Correctable errors (CE) with `--allow-ce` should not trigger early stop -- only UE or memtester failure should
 - The polling loop must not interfere with memtester performance; a simple shell `sleep`/`diff` loop on EDAC sysfs counters should have negligible overhead
 
-## 12. FAQ: Interpreting memtester test names
+## 11. FAQ: Interpreting memtester test names
 
 Add an [FAQ.md](FAQ.md) entry explaining which pattern tests what (stuck address, walking ones/zeros, checkerboard, etc.) and what class of fault each one detects.

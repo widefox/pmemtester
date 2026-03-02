@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5 (2026-03-02)
+
+### Documentation
+
+- Added FAQ section: "How do I test HBM or other memory on CPU-less NUMA nodes?" with NVIDIA Grace Blackwell HBM as primary example, numactl workflow, and EDAC considerations
+- Added README cross-reference from "Single-socket testing" to CPU-less NUMA node FAQ
+- Extended TODO NUMA locality item with multi-node `--numa-node 1,2,3` support for HBM testing
+- Added platform support table for memtester and stressapptest architectures
+- Added phase-labeled completion estimates for both phases
+- Removed TODO #7 (Time Estimation) — implemented in v0.4
+
 ## v0.4 (2026-02-26)
 
 ### New features
