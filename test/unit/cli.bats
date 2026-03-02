@@ -544,3 +544,28 @@ setup() {
     assert_success
     assert_output --partial "--estimate"
 }
+
+# --- --stop-on-error flag tests ---
+
+@test "parse_args default STOP_ON_ERROR is 0" {
+    parse_args
+    [[ "$STOP_ON_ERROR" == "0" ]]
+}
+
+@test "parse_args --stop-on-error sets STOP_ON_ERROR to 1" {
+    parse_args --stop-on-error
+    [[ "$STOP_ON_ERROR" == "1" ]]
+}
+
+@test "parse_args --stop-on-error combined with other flags" {
+    parse_args --percent 80 --stop-on-error --iterations 3
+    [[ "$STOP_ON_ERROR" == "1" ]]
+    [[ "$PERCENT" == "80" ]]
+    [[ "$ITERATIONS" == "3" ]]
+}
+
+@test "usage includes --stop-on-error" {
+    run usage
+    assert_success
+    assert_output --partial "--stop-on-error"
+}

@@ -29,6 +29,8 @@ SIZE=""
 PERCENT_SET=0
 # shellcheck disable=SC2034
 ESTIMATE_MODE="auto"
+# shellcheck disable=SC2034
+STOP_ON_ERROR=0
 
 # usage: print help text
 usage() {
@@ -48,6 +50,7 @@ Options:
   --stressapptest-seconds N  stressapptest duration (0 = use memtester time, default: 0)
   --stressapptest-dir DIR  Directory containing stressapptest binary (default: ${DEFAULT_STRESSAPPTEST_DIR})
   --estimate MODE     Time estimate calibration: auto (default), on, off
+  --stop-on-error     Stop immediately when any error is detected (default: wait for all threads)
   --version           Show version
   --help              Show this help message
 EOF
@@ -70,6 +73,7 @@ parse_args() {
             --stressapptest-seconds) STRESSAPPTEST_SECONDS="$2"; shift 2 ;;
             --stressapptest-dir) STRESSAPPTEST_DIR="$2"; shift 2 ;;
             --estimate) ESTIMATE_MODE="$2"; shift 2 ;;
+            --stop-on-error) STOP_ON_ERROR=1; shift ;;
             --version)    echo "pmemtester ${pmemtester_version:-unknown}"; exit 0 ;;
             --help)       usage; exit 0 ;;
             *)
