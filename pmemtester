@@ -117,11 +117,42 @@ main() {
     # Phase 1: memtester
     print_status "Phase 1 (memtester) started: ${ram_per_core_mb}MB x ${core_count} instances" "$log_dir"
     local phase1_start=$SECONDS
+
+    # EDAC polling for --stop-on-error
+    local edac_sentinel="${log_dir}/edac_poll_sentinel"
+    local edac_poll_pid=""
+    if [[ "$STOP_ON_ERROR" -eq 1 ]] && [[ "$edac_supported" -eq 1 ]]; then
+        poll_edac_for_ue "${log_dir}/edac_counters_before.txt" "$edac_sentinel" 10 &
+        edac_poll_pid=$!
+    fi
+
     run_all_memtesters "$memtester_path" "$size_arg" "$ITERATIONS" "$core_count" "$log_dir"
     local memtester_result=0
-    wait_and_collect "$log_dir" || memtester_result=1
+    wait_and_collect "$log_dir" "$STOP_ON_ERROR" || memtester_result=1
+
+    # Stop EDAC poll loop
+    if [[ -n "$edac_poll_pid" ]]; then
+        echo "stop" > "$edac_sentinel"
+        wait "$edac_poll_pid" 2>/dev/null || true
+    fi
+
+    # Check if EDAC poll triggered early stop
+    local edac_early_stop=0
+    if [[ -f "$edac_sentinel" ]] && [[ "$(cat "$edac_sentinel")" == "ue" ]]; then
+        edac_early_stop=1
+        STOP_ON_ERROR_TRIGGERED="edac_ue"
+        log_master "Early stop triggered by EDAC UE detected during Phase 1" "$log_dir"
+        # Kill any remaining memtester processes
+        kill_all_memtesters "$log_dir"
+    fi
+
     local phase1_elapsed=$(( SECONDS - phase1_start ))
     print_status "Phase 1 (memtester) finished: $(format_phase_result "$core_count" "$MEMTESTER_FAIL_COUNT") ($(format_duration "$phase1_elapsed"))" "$log_dir"
+
+    # Log early stop trigger if applicable
+    if [[ -n "$STOP_ON_ERROR_TRIGGERED" ]]; then
+        print_status "Early stop triggered by: ${STOP_ON_ERROR_TRIGGERED}" "$log_dir"
+    fi
 
     # Intermediate EDAC check (informational)
     local edac_mid_class="none"
@@ -134,7 +165,8 @@ main() {
 
     # Phase 2: conditional stressapptest
     local stressapptest_result=0
-    if [[ "$run_stressapptest_pass" -eq 1 ]]; then
+    local early_stop=$(( edac_early_stop || (STOP_ON_ERROR == 1 && memtester_result != 0) ))
+    if [[ "$run_stressapptest_pass" -eq 1 ]] && [[ "$early_stop" -eq 0 ]]; then
         # auto mode: skip if memtester failed
         if [[ "$STRESSAPPTEST_MODE" == "auto" ]] && [[ "$memtester_result" -ne 0 ]]; then
             log_master "Skipping stressapptest: memtester failed" "$log_dir"
