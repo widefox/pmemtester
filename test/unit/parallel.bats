@@ -117,3 +117,37 @@ teardown() {
     # After kill_all_memtesters returns, the PID must not be running
     ! kill -0 "$pid" 2>/dev/null
 }
+
+# --- wait_and_collect stop_on_error tests ---
+
+@test "wait_and_collect stop_on_error=0 waits for all threads" {
+    # All 4 fail — without stop-on-error, wait for all
+    create_mock memtester 'sleep 0.1; exit 1'
+    run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 4 "$TEST_LOG_DIR"
+    ! wait_and_collect "$TEST_LOG_DIR" 0
+    [[ "$MEMTESTER_FAIL_COUNT" -eq 4 ]]
+}
+
+@test "wait_and_collect stop_on_error=1 stops after first failure" {
+    local flag_file="${TEST_LOG_DIR}/.order"
+    echo "0" > "$flag_file"
+    create_mock memtester 'n=$(cat '"\"$flag_file\""'); n=$((n+1)); echo "$n" > '"\"$flag_file\""'; if [ "$n" -eq 1 ]; then exit 1; else sleep 30; exit 0; fi'
+
+    run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 4 "$TEST_LOG_DIR"
+    ! wait_and_collect "$TEST_LOG_DIR" 1
+    [[ "$STOP_ON_ERROR_TRIGGERED" == "memtester" ]]
+}
+
+@test "wait_and_collect stop_on_error=1 all pass returns 0" {
+    create_mock memtester 'exit 0'
+    run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 3 "$TEST_LOG_DIR"
+    wait_and_collect "$TEST_LOG_DIR" 1
+    [[ "$STOP_ON_ERROR_TRIGGERED" == "" ]]
+}
+
+@test "wait_and_collect no arg defaults to stop_on_error=0" {
+    create_mock memtester 'exit 0'
+    run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 2 "$TEST_LOG_DIR"
+    # Should work without second argument (backwards compat)
+    wait_and_collect "$TEST_LOG_DIR"
+}

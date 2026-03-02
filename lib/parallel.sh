@@ -55,18 +55,26 @@ run_all_memtesters() {
 }
 
 # wait_and_collect: wait for all PIDs, return 0 if all pass, 1 if any fail
-# Usage: wait_and_collect <log_dir>
+# Usage: wait_and_collect <log_dir> [stop_on_error]
+# stop_on_error=1: kill remaining PIDs and return immediately on first failure
 wait_and_collect() {
     local log_dir="$1"
+    local stop_on_error="${2:-0}"
     local failed=0
     local i=0
     MEMTESTER_FAIL_COUNT=0
+    STOP_ON_ERROR_TRIGGERED=""
 
     for pid in "${MEMTESTER_PIDS[@]}"; do
         if ! wait "$pid"; then
             log_master "Thread ${i} FAILED" "$log_dir"
             MEMTESTER_FAIL_COUNT=$(( MEMTESTER_FAIL_COUNT + 1 ))
             failed=1
+            if [[ "$stop_on_error" -eq 1 ]]; then
+                STOP_ON_ERROR_TRIGGERED="memtester"
+                kill_all_memtesters "$log_dir"
+                return 1
+            fi
         fi
         i=$(( i + 1 ))
     done
