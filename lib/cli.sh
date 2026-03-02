@@ -31,6 +31,8 @@ PERCENT_SET=0
 ESTIMATE_MODE="auto"
 # shellcheck disable=SC2034
 STOP_ON_ERROR=0
+# shellcheck disable=SC2034
+THREADS=0
 
 # usage: print help text
 usage() {
@@ -51,6 +53,7 @@ Options:
   --stressapptest-dir DIR  Directory containing stressapptest binary (default: ${DEFAULT_STRESSAPPTEST_DIR})
   --estimate MODE     Time estimate calibration: auto (default), on, off
   --stop-on-error     Stop immediately when any error is detected (default: wait for all threads)
+  --threads N         Number of memtester instances to run (default: auto-detect physical cores)
   --version           Show version
   --help              Show this help message
 EOF
@@ -74,6 +77,7 @@ parse_args() {
             --stressapptest-dir) STRESSAPPTEST_DIR="$2"; shift 2 ;;
             --estimate) ESTIMATE_MODE="$2"; shift 2 ;;
             --stop-on-error) STOP_ON_ERROR=1; shift ;;
+            --threads)    THREADS="$2"; shift 2 ;;
             --version)    echo "pmemtester ${pmemtester_version:-unknown}"; exit 0 ;;
             --help)       usage; exit 0 ;;
             *)
@@ -148,5 +152,16 @@ validate_args() {
             return 1
             ;;
     esac
+    if [[ "$THREADS" -lt 0 ]] 2>/dev/null; then
+        echo "ERROR: --threads must be >= 0 (got ${THREADS})" >&2
+        return 1
+    fi
+    if [[ "$THREADS" -gt 0 ]]; then
+        local logical_cpus
+        logical_cpus="$(nproc 2>/dev/null || echo 0)"
+        if [[ "$logical_cpus" -gt 0 ]] && [[ "$THREADS" -gt "$logical_cpus" ]]; then
+            echo "WARNING: --threads ${THREADS} exceeds logical CPU count (${logical_cpus})" >&2
+        fi
+    fi
     return 0
 }

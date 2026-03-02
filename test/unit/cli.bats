@@ -569,3 +569,64 @@ setup() {
     assert_success
     assert_output --partial "--stop-on-error"
 }
+
+# --- --threads flag tests ---
+
+@test "parse_args default THREADS is 0" {
+    parse_args
+    [[ "$THREADS" == "0" ]]
+}
+
+@test "parse_args --threads 4 sets THREADS" {
+    parse_args --threads 4
+    [[ "$THREADS" == "4" ]]
+}
+
+@test "parse_args --threads 1 sets THREADS" {
+    parse_args --threads 1
+    [[ "$THREADS" == "1" ]]
+}
+
+@test "parse_args --threads combined with other flags" {
+    parse_args --percent 80 --threads 2 --iterations 3
+    [[ "$THREADS" == "2" ]]
+    [[ "$PERCENT" == "80" ]]
+    [[ "$ITERATIONS" == "3" ]]
+}
+
+@test "validate_args --threads -1 fails" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=-1
+    run validate_args
+    assert_failure
+    assert_output --partial "threads"
+}
+
+@test "validate_args --threads 4 passes" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=4
+    run validate_args
+    assert_success
+}
+
+@test "validate_args --threads warns if greater than nproc" {
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    printf '#!/bin/sh\necho 2\n' > "${mock_bin}/nproc"
+    chmod +x "${mock_bin}/nproc"
+    PATH="${mock_bin}:${PATH}" \
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=8
+    run validate_args
+    assert_success
+    assert_output --partial "WARNING"
+}
+
+@test "usage includes --threads" {
+    run usage
+    assert_success
+    assert_output --partial "--threads"
+}
