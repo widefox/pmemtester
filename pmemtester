@@ -53,6 +53,11 @@ main() {
         ram_kb="$(calculate_test_ram_kb_milli "$millipercent" "$RAM_TYPE")"
     fi
     core_count="$(get_core_count)"
+    local threads_override_msg=""
+    if [[ "$THREADS" -gt 0 ]]; then
+        threads_override_msg="Thread override: using --threads ${THREADS} (auto-detected: ${core_count} cores)"
+        core_count="$THREADS"
+    fi
     ram_per_core_mb="$(divide_ram_per_core_mb "$ram_kb" "$core_count")"
     validate_ram_params "$core_count" "$ram_per_core_mb"
 
@@ -63,6 +68,9 @@ main() {
 
     local log_dir="${LOG_DIR:-/tmp/pmemtester.$$}"
     init_logs "$log_dir" "$core_count"
+    if [[ -n "$threads_override_msg" ]]; then
+        print_status "$threads_override_msg" "$log_dir"
+    fi
 
     # Report binary detection
     print_status "memtester found: ${memtester_path}" "$log_dir"
