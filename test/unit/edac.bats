@@ -220,3 +220,84 @@ teardown() {
     # stderr is merged into output by bats 'run'
     assert_output --partial "mc0/csrow0/ce_count"
 }
+
+# --- poll_edac_for_ue tests ---
+
+@test "poll_edac_for_ue writes ue to sentinel when UE detected" {
+    local baseline="${TEST_DIR}/baseline.txt"
+    local sentinel="${TEST_DIR}/sentinel.txt"
+
+    # Baseline: no errors
+    echo "mc0/csrow0/ce_count:0" > "$baseline"
+    echo "mc0/csrow0/ue_count:0" >> "$baseline"
+
+    # Override EDAC_BASE so capture_edac_counters reads a fixture with a UE
+    export EDAC_BASE="${FIXTURE_DIR}/edac_counters_ue_only"
+
+    # Run poll in background with 0s interval
+    poll_edac_for_ue "$baseline" "$sentinel" 0 &
+    local poll_pid=$!
+
+    # Give it time to detect
+    sleep 0.5
+    kill "$poll_pid" 2>/dev/null || true
+    wait "$poll_pid" 2>/dev/null || true
+
+    [[ -f "$sentinel" ]]
+    [[ "$(cat "$sentinel")" == "ue" ]]
+}
+
+@test "poll_edac_for_ue does not write sentinel when only CE" {
+    local baseline="${TEST_DIR}/baseline.txt"
+    local sentinel="${TEST_DIR}/sentinel.txt"
+
+    echo "mc0/csrow0/ce_count:0" > "$baseline"
+    echo "mc0/csrow0/ue_count:0" >> "$baseline"
+
+    export EDAC_BASE="${FIXTURE_DIR}/edac_counters_ce_only"
+
+    poll_edac_for_ue "$baseline" "$sentinel" 0 &
+    local poll_pid=$!
+    sleep 0.3
+    kill "$poll_pid" 2>/dev/null || true
+    wait "$poll_pid" 2>/dev/null || true
+
+    # Sentinel should not be written (or not contain "ue")
+    if [[ -f "$sentinel" ]]; then
+        [[ "$(cat "$sentinel")" != "ue" ]]
+    fi
+}
+
+@test "poll_edac_for_ue stops when sentinel contains stop" {
+    local baseline="${TEST_DIR}/baseline.txt"
+    local sentinel="${TEST_DIR}/sentinel.txt"
+
+    echo "mc0/csrow0/ue_count:0" > "$baseline"
+    # Pre-write stop sentinel
+    echo "stop" > "$sentinel"
+
+    export EDAC_BASE="${FIXTURE_DIR}/edac_counters_ue_only"
+
+    # Should exit immediately (sentinel already says stop)
+    run poll_edac_for_ue "$baseline" "$sentinel" 0
+    # It exits; sentinel still contains "stop", not "ue"
+    [[ "$(cat "$sentinel")" == "stop" ]]
+}
+
+@test "poll_edac_for_ue does nothing when no UE and no stop" {
+    local baseline="${TEST_DIR}/baseline.txt"
+    local sentinel="${TEST_DIR}/sentinel.txt"
+
+    echo "mc0/csrow0/ce_count:0" > "$baseline"
+    echo "mc0/csrow0/ue_count:0" >> "$baseline"
+
+    export EDAC_BASE="${FIXTURE_DIR}/edac_counters_zero"
+
+    poll_edac_for_ue "$baseline" "$sentinel" 0 &
+    local poll_pid=$!
+    sleep 0.3
+    kill "$poll_pid" 2>/dev/null || true
+    wait "$poll_pid" 2>/dev/null || true
+
+    [[ ! -f "$sentinel" ]]
+}

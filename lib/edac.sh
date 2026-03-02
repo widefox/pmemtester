@@ -94,3 +94,35 @@ classify_edac_counters() {
         return 0
     fi
 }
+
+# poll_edac_for_ue: background EDAC UE polling loop for --stop-on-error
+# Writes "ue" to sentinel_file if a UE counter increase is detected.
+# Exits immediately if sentinel_file already contains "stop".
+# Usage: poll_edac_for_ue <baseline_file> <sentinel_file> <interval_seconds>
+poll_edac_for_ue() {
+    local baseline_file="$1" sentinel_file="$2" interval="$3"
+
+    while true; do
+        # Stop if sentinel says so
+        if [[ -f "$sentinel_file" ]] && [[ "$(cat "$sentinel_file")" == "stop" ]]; then
+            return 0
+        fi
+
+        [[ "$interval" -gt 0 ]] && sleep "$interval"
+
+        local tmp
+        tmp="$(mktemp)"
+        capture_edac_counters > "$tmp" 2>/dev/null || { rm -f "$tmp"; continue; }
+
+        local classification
+        classification="$(classify_edac_counters "$baseline_file" "$tmp" 2>/dev/null)" || true
+        rm -f "$tmp"
+
+        case "$classification" in
+            ue_only|ce_and_ue)
+                echo "ue" > "$sentinel_file"
+                return 0
+                ;;
+        esac
+    done
+}
