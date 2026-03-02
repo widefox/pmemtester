@@ -633,3 +633,35 @@ pmemtester monitors EDAC counters (`/sys/devices/system/edac/mc/`) before, betwe
 The EDAC check catches errors that memtester's own exit code might miss: for example, if a UE occurs in memory not currently under test, or if a patrol scrub detects a UE that was poisoned and retired without killing any memtester process.
 
 References: [HWPoison kernel documentation](https://docs.kernel.org/mm/hwpoison.html), [HWPOISON (LWN.net, Andi Kleen, 2009)](https://lwn.net/Articles/348886/), [Machine check recovery when kernel accesses poison (LWN.net, 2015)](https://lwn.net/Articles/671301/), [mm/memory-failure.c (kernel source)](https://github.com/torvalds/linux/blob/master/mm/memory-failure.c), [arch/x86/kernel/cpu/mce/core.c (kernel source)](https://github.com/torvalds/linux/blob/master/arch/x86/kernel/cpu/mce/core.c), [rasdaemon repository](https://github.com/mchehab/rasdaemon).
+
+## What do the memtester test names mean?
+
+memtester runs a fixed sequence of pattern tests. Each test writes a pattern to every tested address and reads it back to detect faults.
+
+| Test name | Pattern written | What it detects |
+|-----------|----------------|-----------------|
+| Random Value | Random 64-bit words | General data retention faults; reduces aliasing from fixed patterns |
+| Compare XOR | XOR of two random values | Single-bit retention; coupling between adjacent bits |
+| Compare SUB | Subtraction residue | Arithmetic path faults in memory controllers |
+| Compare MUL | Multiplication residue | Same as SUB; exercises different bit patterns |
+| Compare DIV | Division residue | Same; ensures full coverage of bit combinations |
+| Compare OR | OR accumulation | Stuck-at-0 faults: a bit stuck low will never be set |
+| Compare AND | AND accumulation | Stuck-at-1 faults: a bit stuck high will never be cleared |
+| Sequential Increment | 0, 1, 2, 3, … | Address decoder faults; row/column aliasing |
+| Solid Bits | All 1s then all 0s | Stuck-at faults; DRAM sense amplifier sensitivity |
+| Block Sequential | 0x00…0xff rotating block | Coupling faults between cells in the same row |
+| Checkerboard | 0xAA…0x55 alternating | Adjacent-cell coupling (checkerboard is the worst case for capacitive coupling) |
+| Bit Spread | 0x01, 0x02, 0x04… | Walking-ones: detects a single faulty bit in each position |
+| Bit Flip | Complement of Bit Spread | Walking-zeros: complement of walking-ones |
+| Walking Ones | Single 1 bit marching | Classic March C− derived test; address decoder + single-bit faults |
+| Walking Zeros | Single 0 bit marching | Complement of Walking Ones |
+
+**Fault classes explained:**
+
+- **Stuck-at faults**: A bit is permanently 0 or 1 regardless of what is written. Detected by Solid Bits, Compare OR/AND.
+- **Coupling faults**: Writing one cell disturbs a neighbour. Detected by Checkerboard, Block Sequential, XOR/Compare tests.
+- **Address decoder faults**: Two distinct addresses refer to the same physical cell, so writing one corrupts the other. Detected by Sequential Increment, Walking Ones/Zeros.
+- **Data retention faults**: A cell loses its value over time (DRAM refresh failure). All tests detect this if the write-read gap is long enough; memtester does not add artificial delays, so very slow retention faults may be missed.
+- **Transition faults**: A cell that reads correctly in isolation fails after a 0→1 or 1→0 transition. Detected by Bit Flip, Bit Spread.
+
+memtester runs all tests in order for each iteration (`--iterations N` repeats the full sequence N times). A failure in any test on any thread causes pmemtester to report FAIL; the specific failing test and address are logged in the per-thread log (`$LOG_DIR/thread_N.log`).
