@@ -665,3 +665,32 @@ memtester runs a fixed sequence of pattern tests. Each test writes a pattern to 
 - **Transition faults**: A cell that reads correctly in isolation fails after a 0→1 or 1→0 transition. Detected by Bit Flip, Bit Spread.
 
 memtester runs all tests in order for each iteration (`--iterations N` repeats the full sequence N times). A failure in any test on any thread causes pmemtester to report FAIL; the specific failing test and address are logged in the per-thread log (`$LOG_DIR/thread_N.log`).
+
+## When should I use --stop-on-error?
+
+By default pmemtester waits for all memtester threads to finish before declaring a verdict, even if one thread fails early. `--stop-on-error` changes this: it kills remaining threads and stops immediately when any error is detected.
+
+Use `--stop-on-error` when:
+
+- **Burn-in / CI pipelines**: you want a fast fail verdict without waiting hours for the surviving threads to complete.
+- **Uncorrectable EDAC errors**: a UE indicates a serious hardware fault; continuing to stress faulty memory risks data corruption or a kernel panic. `--stop-on-error` stops as soon as a UE counter increases (polled every 10 seconds).
+- **Large multi-socket systems**: a single failing core on a 128-core system would otherwise hold the run for the full duration.
+
+Two sources trigger early stop:
+
+1. **memtester exit**: any memtester process exits non-zero → remaining processes are sent SIGTERM and the run proceeds to verdict.
+2. **EDAC UE polling**: uncorrectable error counters are polled every 10 seconds during Phase 1. If any UE counter increases → all memtester processes are killed and the run proceeds to verdict. CE-only events do not trigger early stop (consistent with `--allow-ce` semantics).
+
+Phase 2 (stressapptest) is skipped on early stop. The master log records which error source triggered the stop.
+
+## When should I use --threads N?
+
+By default pmemtester launches one memtester instance per physical CPU core (`lscpu -b -p=Socket,Core`, fallback to `nproc`). `--threads N` overrides this with an explicit count.
+
+Use cases:
+
+- **Single-socket testing on dual-socket**: `--threads $(lscpu -b -p=Socket,Core | grep -v '^#' | grep '^0,' | sort -u | wc -l)` to test only socket 0's memory with socket 0's cores (combine with `numactl --cpunodebind=0 --membind=0`).
+- **Fewer instances than cores**: reduce parallelism to leave cores free for other workloads on a running server.
+- **More instances than physical cores**: e.g. match hardware thread count to experiment with SMT scheduling (note: this typically reduces per-thread bandwidth on memory-bound workloads).
+
+A WARNING is printed if `N` exceeds the logical CPU count. The test proceeds regardless.

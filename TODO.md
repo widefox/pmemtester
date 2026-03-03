@@ -50,14 +50,7 @@ pmemtester currently treats all CPU threads homogeneously:
 - Document this assumption and any edge cases (e.g., E-cores with smaller cache may exhibit different memory access patterns)
 - Consider whether thread pinning (`taskset`) to specific core types would improve test coverage or reproducibility
 
-## 5. Thread Override
-
-pmemtester uses `lscpu -b -p=Socket,Core` to detect physical cores (with `nproc` fallback), launching one memtester per physical core. This avoids SMT bandwidth regression measured at up to 3x on memory-bound workloads (see [FAQ.md](FAQ.md#why-one-memtester-per-core-instead-of-one-per-thread)).
-
-- Consider adding a `--threads N` override for users who want explicit control over the number of memtester instances
-- This would allow testing with fewer processes (e.g., single-socket on a dual-socket system) or more (e.g., matching hardware threads for scheduler saturation experiments)
-
-## 6. Thread Pinning
+## 5. Thread Pinning (was #6) Thread Pinning
 
 Pin each memtester instance to a specific physical core with `taskset` or `sched_setaffinity`:
 
@@ -132,31 +125,3 @@ Considerations:
 - Memory allocation strategy changes: memtester uses `mmap(MAP_LOCKED)` for a single region; pmemtester would need per-thread allocations
 - Cross-platform portability: memtester supports non-Linux systems; pmemtester is Linux-only (EDAC dependency)
 - Build system: autotools or meson, with the test suite ported from bats to a C test framework or kept as integration tests
-
-## 10. Stop on First Error
-
-Add a `--stop-on-error` flag that terminates the run immediately when any error is detected, rather than waiting for all memtester instances to complete.
-
-Rationale:
-- On large multi-socket systems a full run can take hours; if the first core reports a failure after 10 minutes there is no point waiting for the remaining cores
-- EDAC uncorrectable errors (UE) indicate serious hardware faults -- continuing to stress faulty memory risks data corruption or kernel panic
-- Useful in automated pipelines (CI, burn-in scripts) where a fast fail verdict is more valuable than a complete report
-
-Behaviour:
-- Off by default (current behaviour: wait for all threads, then report)
-- When enabled, monitor two error sources during the run:
-  1. **memtester exit**: any memtester process exits non-zero → kill remaining memtester processes and proceed to verdict
-  2. **EDAC polling**: periodically poll EDAC counters (e.g., every 5-10 seconds) during the run; if any counter increases → kill all memtester processes and proceed to verdict
-- Take a final EDAC snapshot after killing processes so the before/after diff is accurate
-- Report which error source triggered the early stop in the master log
-- If the stressapptest second pass is enabled, skip it on early stop (memory is already known bad)
-
-Considerations:
-- EDAC polling interval is a tradeoff: too frequent adds overhead, too infrequent delays detection. A reasonable default is every 10 seconds, potentially configurable with `--edac-poll-interval`
-- memtester processes are independent background jobs; killing them requires sending SIGTERM to each tracked PID and waiting for cleanup
-- Correctable errors (CE) with `--allow-ce` should not trigger early stop -- only UE or memtester failure should
-- The polling loop must not interfere with memtester performance; a simple shell `sleep`/`diff` loop on EDAC sysfs counters should have negligible overhead
-
-## 11. FAQ: Interpreting memtester test names
-
-Add an [FAQ.md](FAQ.md) entry explaining which pattern tests what (stuck address, walking ones/zeros, checkerboard, etc.) and what class of fault each one detects.

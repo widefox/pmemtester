@@ -17,6 +17,8 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 - Linux EDAC hardware error detection with intermediate results after memtester and final check spanning both passes
 - Immediate EDAC feedback between phases: know your hardware error state before waiting for stressapptest
 - Optionally allow correctable EDAC errors (`--allow-ce`); only fail on uncorrectable (UE)
+- `--stop-on-error`: kill remaining threads and stop immediately on first error (memtester exit or EDAC UE)
+- `--threads N`: override auto-detected core count (useful for single-socket testing or custom parallelism)
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester, stressapptest, and EDAC results
 
@@ -154,7 +156,7 @@ sudo pmemtester --percent 1 --stressapptest off
 
 ```console
 $ pmemtester --help
-Usage: pmemtester 0.5 [OPTIONS]
+Usage: pmemtester 0.6 [OPTIONS]
 
 Options:
   --percent N              Percentage of RAM to test (0.001-100, default: 90)
@@ -163,7 +165,9 @@ Options:
   --memtester-dir DIR      Directory containing memtester binary (default: /usr/local/bin)
   --log-dir DIR            Directory for log files (default: /tmp/pmemtester.PID)
   --iterations N           Number of memtester iterations (default: 1)
+  --threads N              Number of memtester instances to run (default: auto-detect physical cores)
   --allow-ce               Allow correctable EDAC errors (CE); only fail on uncorrectable (UE)
+  --stop-on-error          Stop immediately when any error is detected (default: wait for all threads)
   --color MODE             Coloured output: auto (default), on, off
   --stressapptest MODE     stressapptest pass: auto (default), on, off
   --stressapptest-seconds N  stressapptest duration (0 = use memtester time, default: 0)
@@ -549,14 +553,16 @@ This is an important case: memtester's deterministic patterns found no stuck bit
 ```workflow
 parse_args --> validate_args --> color_init --> find_memtester --> resolve_stressapptest
     --> [if --size: parse_size_to_kb | else: decimal_to_millipercent --> calculate_test_ram_kb_milli]
-    --> get_core_count --> divide_ram_per_core_mb
+    --> get_core_count --> [if --threads N: override core_count] --> divide_ram_per_core_mb
     --> validate_ram_params --> check_memlock_sufficient --> init_logs
     --> [report binary detection]
     --> [EDAC before snapshot]
-    --> Phase 1: run_all_memtesters --> wait_and_collect
+    --> [if --stop-on-error and EDAC: start poll_edac_for_ue in background]
+    --> Phase 1: run_all_memtesters --> wait_and_collect [--stop-on-error: kill remaining on first failure]
+    --> [stop EDAC poll; check sentinel for early UE stop]
     --> print Phase 1 result (pass/fail count + duration)
     --> [EDAC mid snapshot: compare before vs mid, print result]
-    --> Phase 2: [conditional stressapptest] --> print Phase 2 result
+    --> Phase 2: [conditional stressapptest; skipped on early stop] --> print Phase 2 result
     --> [EDAC after snapshot: final check spanning both phases]
     --> aggregate_logs --> print total duration --> PASS/FAIL
 ```
@@ -594,13 +600,13 @@ Nearly all major distros enable `CONFIG_EDAC=y` with hardware drivers as modules
 
 ## Roadmap
 
-See [TODO.md](TODO.md) for planned improvements including EDAC region correlation, multi-architecture validation, NUMA locality, heterogeneous core handling, and customisable thread count.
+See [TODO.md](TODO.md) for planned improvements including EDAC region correlation, multi-architecture validation, NUMA locality, heterogeneous core handling, and thread pinning.
 
 ## Linux Memory Testing Tools Comparison
 
 | Tool | Environment | Parallel | ECC CE Detection | Active | License |
 |------|-------------|----------|-----------------|--------|---------|
-| **pmemtester** | Userspace | Yes | **Yes** (EDAC before/between/after) | Yes (v0.5, 2026) | GPL-2.0 |
+| **pmemtester** | Userspace | Yes | **Yes** (EDAC before/between/after) | Yes (v0.6, 2026) | GPL-2.0 |
 | memtester | Userspace | No | No | Yes (v4.7.1, 2024) | GPL-2.0 |
 | stressapptest | Userspace | Yes | No | Low (v1.0.11, 2023) | Apache-2.0 |
 | stress-ng | Userspace | Yes | No | Yes (monthly releases) | GPL-2.0 |
