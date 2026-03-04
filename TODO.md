@@ -50,7 +50,7 @@ pmemtester currently treats all CPU threads homogeneously:
 - Document this assumption and any edge cases (e.g., E-cores with smaller cache may exhibit different memory access patterns)
 - Consider whether thread pinning (`taskset`) to specific core types would improve test coverage or reproducibility
 
-## 5. Thread Pinning (was #6) Thread Pinning
+## 5. Thread Pinning
 
 Pin each memtester instance to a specific physical core with `taskset` or `sched_setaffinity`:
 
