@@ -10,6 +10,25 @@ GTAGS
 
 # Claude Code
 .claude/
+.mcp.json
+
+# Claude Code sandbox artifacts
+.bash_profile
+.bashrc
+.gitconfig
+.profile
+.ripgreprc
+.zprofile
+.zshrc
+HEAD
+config
+hooks
+objects
+refs
+
+# IDE
+.idea
+.vscode
 
 # Emacs
 *~
