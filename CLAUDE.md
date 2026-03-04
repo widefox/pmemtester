@@ -59,6 +59,21 @@ make coverage
 ./pmemtester --percent 80 --estimate off
 ```
 
+## Version Bump Checklist
+
+When bumping the version, update **all** of these locations:
+
+| File | Location | Example |
+|------|----------|---------|
+| `pmemtester:11` | `pmemtester_version="X.Y"` | Runtime version string |
+| `pmemtester:3` | `# Version: X.Y` | Header comment |
+| `Makefile:2` | `VERSION := X.Y` | `make dist` / `make install` |
+| `README.md` Usage block | `Usage: pmemtester X.Y [OPTIONS]` | Help text example |
+| `README.md` tool comparison | `Yes (vX.Y, 20XX)` | Linux Memory Testing Tools table |
+| `README.md` Testing section | `N tests (N unit + N integration + N smoke)` | Test count (run `make test` to get current numbers) |
+| `CHANGELOG.md` | New `## vX.Y` section at top | Release notes |
+| `test/unit/cli.bats` | `pmemtester_version="X.Y"` in `--version` test | Test expectation |
+
 ## Architecture
 
 ### Source Layout
