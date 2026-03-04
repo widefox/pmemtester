@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pmemtester - Parallel wrapper for memtester
-# Version: 0.4
+# Version: 0.6
 # Author: Johnathon Weare <jrweare@gmail.com>
 # URL: https://github.com/widefox/pmemtester
 # SPDX-License-Identifier: GPL-2.0-only

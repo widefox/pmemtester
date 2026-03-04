@@ -45,10 +45,10 @@ setup() {
 }
 
 @test "parse_args --version" {
-    pmemtester_version="0.5"
+    pmemtester_version="0.6"
     run parse_args --version
     assert_success
-    assert_output --partial "pmemtester 0.5"
+    assert_output --partial "pmemtester 0.6"
 }
 
 @test "parse_args --help" {

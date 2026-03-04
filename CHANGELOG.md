@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.6 (2026-03-02)
+
+### New features
+
+- **`--stop-on-error`**: Terminate immediately on first error (memtester exit or EDAC UE), killing remaining threads. EDAC UE counters are polled every 10 seconds during Phase 1. Phase 2 (stressapptest) is skipped on early stop.
+- **`--threads N`**: Override auto-detected physical core count with an explicit number of memtester instances. Warns if N exceeds logical CPU count.
+
+### New CLI flags
+
+- `--stop-on-error`: Fast-fail on first memtester failure or EDAC UE (default: wait for all threads)
+- `--threads N`: Explicit thread count (default: auto-detect physical cores via `lscpu`)
+
+### New functions
+
+- `kill_all_memtesters()` in `parallel.sh`: Send SIGTERM to all tracked memtester PIDs and wait for exit
+- `poll_edac_for_ue()` in `edac.sh`: Background EDAC UE polling loop for `--stop-on-error`
+- `wait_and_collect()` now accepts optional `stop_on_error` parameter (backwards compatible)
+
+### Documentation
+
+- Added FAQ sections: "When should I use --stop-on-error?" and "When should I use --threads N?"
+- Added FAQ section: "What do the memtester test names mean?" with fault class table
+- Added `--stop-on-error` and `--threads N` to README features, usage, and execution flow
+- Removed completed TODO items #5 (thread override) and #10 (stop on first error)
+- Renumbered TODO #6 (thread pinning) to #5
+
 ## v0.5 (2026-03-02)
 
 ### Documentation
