@@ -583,6 +583,31 @@ $ echo $?
 
 This is an important case: memtester's deterministic patterns found no stuck bits, but stressapptest's randomised concurrent traffic revealed a timing margin failure or electrically weak RAM. This is exactly the kind of intermittent failure that stressapptest was designed to catch (see [Testing philosophy](#testing-philosophy-probe-hammer-chaos-monkey-probe--hammer--observe)).
 
+## Example Output: NUMA node with CPU pinning
+
+Testing a single NUMA node with per-core pinning on a dual-socket server (2 sockets, 24 cores each, 256 GB per socket):
+
+```console
+$ sudo pmemtester --numa-node 0 --pin --percent 90
+[2026-03-06 10:00:00] NUMA node: 0
+[2026-03-06 10:00:00] CPU pinning: enabled (CPUs: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23)
+[2026-03-06 10:00:00] memtester found: /usr/local/bin/memtester
+[2026-03-06 10:00:00] stressapptest found: /usr/local/bin/stressapptest
+[2026-03-06 10:00:00] pmemtester started: 230400MB across 24 cores, 1 iteration(s)
+[2026-03-06 10:00:00] Phase 1 (memtester) started: 9600MB x 24 instances
+[2026-03-06 12:00:01] Phase 1 (memtester) finished: all 24 instances passed (120m 1s)
+[2026-03-06 12:00:01] EDAC after Phase 1: no errors detected
+[2026-03-06 12:00:01] Phase 2 (stressapptest) started: 230400MB, 7201s
+[2026-03-06 12:00:01] Estimated Phase 2 completion: ~120m 1s (ETA: 2026-03-06 14:00:02)
+[2026-03-06 14:00:02] Phase 2 (stressapptest) finished: PASSED (120m 1s)
+[2026-03-06 14:00:02] Total duration: 240m 2s
+PASS
+$ echo $?
+0
+```
+
+Note how `--numa-node 0` reduces the core count from 48 (both sockets) to 24 (socket 0 only), and each memtester gets twice the RAM (9600 MB vs 4800 MB). The `--pin` flag shows the exact CPU list being used. Socket 1 remains fully available for production workloads during the test.
+
 ## Execution Flow
 
 ```workflow

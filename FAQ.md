@@ -518,7 +518,9 @@ The `--percent 90` applies to the available memory on the target node, not the w
 
 ### Testing all HBM nodes
 
-Today, run each node separately (as shown above). A future `--numa-node 1,2,3` flag would automate testing multiple nodes in a single command (see [TODO.md](TODO.md#3-numa-locality)).
+Today, run each node separately (as shown above). A future `--numa-node 1,2,3` flag would automate testing multiple CPU-less nodes in a single command (see [TODO.md](TODO.md#3-numa-locality)).
+
+**Note:** For NUMA nodes that *have* CPUs (standard multi-socket servers), use `--numa-node N` instead of manual `numactl` wrapping. See [When should I use --numa-node N?](#when-should-i-use---numa-node-n)
 
 ### Why test HBM separately?
 
@@ -694,3 +696,45 @@ Use cases:
 - **More instances than physical cores**: e.g. match hardware thread count to experiment with SMT scheduling (note: this typically reduces per-thread bandwidth on memory-bound workloads).
 
 A WARNING is printed if `N` exceeds the logical CPU count. The test proceeds regardless.
+
+## When should I use --numa-node N?
+
+Use `--numa-node N` to constrain testing to a single NUMA node's CPUs and memory. This is useful when:
+
+- **Testing one socket at a time** on a multi-socket server, keeping the other socket available for workloads.
+- **Isolating a suspected bad DIMM** to the socket/node where it resides, reducing test time and avoiding cross-node noise.
+- **Post-replacement validation**: after swapping a DIMM on socket 1, test only node 1 instead of the entire system.
+
+```bash
+# Test only NUMA node 0
+sudo pmemtester --numa-node 0 --percent 90
+
+# Test node 1 with explicit thread count
+sudo pmemtester --numa-node 1 --threads 12 --percent 90
+```
+
+The flag wraps each memtester instance with `numactl --cpunodebind=N --membind=N`. The core count is automatically set to the number of physical cores on that node (override with `--threads`). If `--threads T` exceeds the node's core count, a warning is printed.
+
+**CPU-less NUMA nodes** (e.g., HBM on NVIDIA Grace Blackwell): pmemtester will error because there are no CPUs to run memtester on. Use the manual `numactl --membind=N` approach instead — see [How do I test HBM or other memory on CPU-less NUMA nodes?](#how-do-i-test-hbm-or-other-memory-on-cpu-less-numa-nodes)
+
+**Requires:** `numactl` must be installed.
+
+## When should I use --pin?
+
+Use `--pin` to pin each memtester instance to a specific physical CPU core via `taskset`. This is useful when:
+
+- **Reproducibility**: eliminates scheduler migration so each run uses the same core-to-memory mapping. Useful when comparing results across runs or after hardware changes.
+- **Per-core diagnostics**: if one memtester fails, you know exactly which physical core and memory channel were involved.
+- **Eliminating NUMA cross-talk**: combined with `--numa-node`, guarantees each memtester accesses only NUMA-local memory (the kernel's default policy usually does this, but `--pin` makes it deterministic).
+
+```bash
+# Pin each memtester to its own physical core
+sudo pmemtester --pin --percent 90
+
+# Pin to cores on NUMA node 0 only
+sudo pmemtester --numa-node 0 --pin --percent 90
+```
+
+CPU mapping uses `lscpu -b -p=Socket,Core,CPU,Node` to pick the lowest logical CPU ID for each physical core. On SMT/HT systems, only one thread per core is used (avoiding sibling contention). When combined with `--numa-node`, only CPUs on that node are selected.
+
+**Requires:** `taskset` (from util-linux, installed by default on virtually all Linux systems).
