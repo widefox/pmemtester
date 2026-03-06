@@ -5,6 +5,7 @@
 
 PROC_MEMINFO="${PROC_MEMINFO:-/proc/meminfo}"
 SYS_CPU_BASE="${SYS_CPU_BASE:-/sys/devices/system/cpu}"
+SYS_NODE_BASE="${SYS_NODE_BASE:-/sys/devices/system/node}"
 
 # _read_meminfo_field: extract a numeric kB value from /proc/meminfo
 # Usage: _read_meminfo_field <field_name>
@@ -81,4 +82,75 @@ get_l3_cache_kb() {
     fi
 
     return 1
+}
+
+# validate_numa_node: check that NUMA node N exists and numactl is available
+# Usage: validate_numa_node <node>
+validate_numa_node() {
+    local node="$1"
+    if [[ ! -d "${SYS_NODE_BASE}/node${node}" ]]; then
+        echo "ERROR: NUMA node ${node} does not exist (${SYS_NODE_BASE}/node${node}/ not found)" >&2
+        return 1
+    fi
+    if ! command -v numactl > /dev/null 2>&1; then
+        echo "ERROR: --numa-node requires numactl but it is not installed" >&2
+        return 1
+    fi
+    return 0
+}
+
+# get_physical_cpu_list: return space-separated list of one logical CPU per physical core
+# Uses lscpu -b -p=Socket,Core,CPU,Node; picks lowest CPU ID per unique (Socket,Core) pair.
+# Optional argument: NUMA node filter (only return CPUs on that node).
+# Usage: get_physical_cpu_list [node_filter]
+get_physical_cpu_list() {
+    local node_filter="${1:-}"
+    local lscpu_output
+    lscpu_output="$(lscpu -b -p=Socket,Core,CPU,Node 2>/dev/null)" || {
+        echo "ERROR: lscpu failed" >&2
+        return 1
+    }
+
+    echo "$lscpu_output" | awk -F, -v nf="$node_filter" '
+        /^#/ { next }
+        nf != "" && $4 != nf { next }
+        {
+            key = $1 "," $2
+            cpu = $3 + 0
+            if (!(key in seen) || cpu < seen[key]) {
+                seen[key] = cpu
+            }
+        }
+        END {
+            n = asorti(seen, keys)
+            for (i = 1; i <= n; i++) {
+                cpus[++c] = seen[keys[i]]
+            }
+            # Sort CPUs numerically
+            for (i = 1; i <= c; i++)
+                for (j = i+1; j <= c; j++)
+                    if (cpus[i]+0 > cpus[j]+0) {
+                        t = cpus[i]; cpus[i] = cpus[j]; cpus[j] = t
+                    }
+            for (i = 1; i <= c; i++)
+                printf "%s%s", (i>1 ? " " : ""), cpus[i]
+            if (c > 0) printf "\n"
+        }
+    '
+}
+
+# get_node_core_count: return number of physical cores on a specific NUMA node
+# Usage: get_node_core_count <node>
+get_node_core_count() {
+    local node="$1"
+    local cpu_list
+    cpu_list="$(get_physical_cpu_list "$node")" || return 1
+    if [[ -z "$cpu_list" ]]; then
+        echo "0"
+        return 0
+    fi
+    # Count space-separated entries
+    # shellcheck disable=SC2086
+    set -- $cpu_list
+    echo "$#"
 }

@@ -6,6 +6,10 @@
 # Array to track background PIDs
 MEMTESTER_PIDS=()
 
+# CPU_LIST: array of logical CPU IDs for pinning (populated by main script)
+# shellcheck disable=SC2034
+CPU_LIST=()
+
 # STOP_ON_ERROR_TRIGGERED: set to "memtester" or "edac_ue" on early stop
 # shellcheck disable=SC2034
 STOP_ON_ERROR_TRIGGERED=""
@@ -25,14 +29,25 @@ kill_all_memtesters() {
 }
 
 # run_memtester_instance: run a single memtester and log output
-# Usage: run_memtester_instance <memtester_path> <size_arg> <iterations> <thread_id> <log_dir>
+# Usage: run_memtester_instance <memtester_path> <size_arg> <iterations> <thread_id> <log_dir> [cpu_id] [numa_node]
 run_memtester_instance() {
     local memtester_path="$1" size_arg="$2" iterations="$3" thread_id="$4" log_dir="$5"
+    local cpu_id="${6:-}" numa_node="${7:-}"
     local log_file="${log_dir}/thread_${thread_id}.log"
+
+    # Build command array with optional wrappers
+    local cmd=()
+    if [[ -n "$numa_node" ]]; then
+        cmd+=(numactl "--cpunodebind=${numa_node}" "--membind=${numa_node}")
+    fi
+    if [[ -n "$cpu_id" ]]; then
+        cmd+=(taskset -c "$cpu_id")
+    fi
+    cmd+=("$memtester_path" "$size_arg" "$iterations")
 
     log_thread "$thread_id" "Starting memtester: ${size_arg} x ${iterations} iterations" "$log_dir"
 
-    if "$memtester_path" "$size_arg" "$iterations" >> "$log_file" 2>&1; then
+    if "${cmd[@]}" >> "$log_file" 2>&1; then
         log_thread "$thread_id" "PASSED" "$log_dir"
         return 0
     else
@@ -43,6 +58,7 @@ run_memtester_instance() {
 }
 
 # run_all_memtesters: launch memtester instances in background
+# Reads globals: CPU_LIST (array of CPU IDs for pinning), NUMA_NODE (string)
 # Usage: run_all_memtesters <memtester_path> <size_arg> <iterations> <num_threads> <log_dir>
 run_all_memtesters() {
     local memtester_path="$1" size_arg="$2" iterations="$3" num_threads="$4" log_dir="$5"
@@ -50,7 +66,8 @@ run_all_memtesters() {
 
     MEMTESTER_PIDS=()
     for (( i = 0; i < num_threads; i++ )); do
-        run_memtester_instance "$memtester_path" "$size_arg" "$iterations" "$i" "$log_dir" &
+        run_memtester_instance "$memtester_path" "$size_arg" "$iterations" "$i" "$log_dir" \
+            "${CPU_LIST[$i]:-}" "${NUMA_NODE:-}" &
         MEMTESTER_PIDS+=($!)
     done
 }

@@ -157,3 +157,109 @@ teardown() {
     assert_success
     assert_output "3072"
 }
+
+# --- get_physical_cpu_list tests ---
+
+@test "get_physical_cpu_list returns one CPU per physical core" {
+    # 2 sockets x 2 cores x 2 threads = 8 logical CPUs, 4 physical cores
+    create_mock lscpu 'echo "# Socket,Core,CPU,Node"; echo "0,0,0,0"; echo "0,0,1,0"; echo "0,1,2,0"; echo "0,1,3,0"; echo "1,0,4,1"; echo "1,0,5,1"; echo "1,1,6,1"; echo "1,1,7,1"'
+    run get_physical_cpu_list
+    assert_success
+    assert_output "0 2 4 6"
+}
+
+@test "get_physical_cpu_list picks lowest CPU ID per core" {
+    # CPU IDs not in order: core 0 has CPUs 3,0; core 1 has CPUs 5,2
+    create_mock lscpu 'echo "# Socket,Core,CPU,Node"; echo "0,0,3,0"; echo "0,0,0,0"; echo "0,1,5,0"; echo "0,1,2,0"'
+    run get_physical_cpu_list
+    assert_success
+    assert_output "0 2"
+}
+
+@test "get_physical_cpu_list with node filter returns only that nodes CPUs" {
+    # 2 sockets x 2 cores x 2 threads; node 0 = socket 0, node 1 = socket 1
+    create_mock lscpu 'echo "# Socket,Core,CPU,Node"; echo "0,0,0,0"; echo "0,0,1,0"; echo "0,1,2,0"; echo "0,1,3,0"; echo "1,0,4,1"; echo "1,0,5,1"; echo "1,1,6,1"; echo "1,1,7,1"'
+    run get_physical_cpu_list 0
+    assert_success
+    assert_output "0 2"
+}
+
+@test "get_physical_cpu_list with node filter for node 1" {
+    create_mock lscpu 'echo "# Socket,Core,CPU,Node"; echo "0,0,0,0"; echo "0,0,1,0"; echo "0,1,2,0"; echo "0,1,3,0"; echo "1,0,4,1"; echo "1,0,5,1"; echo "1,1,6,1"; echo "1,1,7,1"'
+    run get_physical_cpu_list 1
+    assert_success
+    assert_output "4 6"
+}
+
+@test "get_physical_cpu_list single core" {
+    create_mock lscpu 'echo "# Socket,Core,CPU,Node"; echo "0,0,0,0"'
+    run get_physical_cpu_list
+    assert_success
+    assert_output "0"
+}
+
+@test "get_physical_cpu_list no filter returns all" {
+    create_mock lscpu 'echo "# Socket,Core,CPU,Node"; echo "0,0,0,0"; echo "0,1,1,0"'
+    run get_physical_cpu_list
+    assert_success
+    assert_output "0 1"
+}
+
+@test "get_physical_cpu_list lscpu failure returns error" {
+    create_mock lscpu 'exit 1'
+    run get_physical_cpu_list
+    assert_failure
+}
+
+@test "get_node_core_count returns cores on node 0" {
+    create_mock lscpu 'echo "# Socket,Core,CPU,Node"; echo "0,0,0,0"; echo "0,0,1,0"; echo "0,1,2,0"; echo "0,1,3,0"; echo "1,0,4,1"; echo "1,0,5,1"; echo "1,1,6,1"; echo "1,1,7,1"'
+    run get_node_core_count 0
+    assert_success
+    assert_output "2"
+}
+
+@test "get_node_core_count returns cores on node 1" {
+    create_mock lscpu 'echo "# Socket,Core,CPU,Node"; echo "0,0,0,0"; echo "0,0,1,0"; echo "0,1,2,0"; echo "0,1,3,0"; echo "1,0,4,1"; echo "1,0,5,1"; echo "1,1,6,1"; echo "1,1,7,1"'
+    run get_node_core_count 1
+    assert_success
+    assert_output "2"
+}
+
+@test "get_node_core_count CPU-less node returns 0" {
+    # All CPUs on node 0, nothing on node 1
+    create_mock lscpu 'echo "# Socket,Core,CPU,Node"; echo "0,0,0,0"; echo "0,1,1,0"'
+    run get_node_core_count 1
+    assert_success
+    assert_output "0"
+}
+
+@test "get_node_core_count lscpu failure returns error" {
+    create_mock lscpu 'exit 1'
+    run get_node_core_count 0
+    assert_failure
+}
+
+@test "validate_numa_node valid node passes" {
+    export SYS_NODE_BASE="${FIXTURE_DIR}/sys_node_2node"
+    create_mock numactl 'true'
+    run validate_numa_node 0
+    assert_success
+}
+
+@test "validate_numa_node invalid node fails" {
+    export SYS_NODE_BASE="${FIXTURE_DIR}/sys_node_2node"
+    create_mock numactl 'true'
+    run validate_numa_node 99
+    assert_failure
+    assert_output --partial "does not exist"
+}
+
+@test "validate_numa_node no numactl fails" {
+    export SYS_NODE_BASE="${FIXTURE_DIR}/sys_node_2node"
+    # Remove numactl from PATH by using empty mock dir
+    local empty_bin="${BATS_TEST_TMPDIR}/empty_bin"
+    mkdir -p "$empty_bin"
+    PATH="${empty_bin}:/usr/bin:/bin" run validate_numa_node 0
+    assert_failure
+    assert_output --partial "numactl"
+}

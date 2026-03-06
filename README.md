@@ -19,6 +19,8 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 - Optionally allow correctable EDAC errors (`--allow-ce`); only fail on uncorrectable (UE)
 - `--stop-on-error`: kill remaining threads and stop immediately on first error (memtester exit or EDAC UE)
 - `--threads N`: override auto-detected core count (useful for single-socket testing or custom parallelism)
+- `--numa-node N`: constrain testing to a specific NUMA node (CPU and memory binding via numactl)
+- `--pin`: pin each memtester instance to a specific physical CPU core (via taskset) for reproducible results
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester, stressapptest, and EDAC results
 
@@ -54,6 +56,8 @@ Sources: [memtester source: sizes.h](https://github.com/jnavila/memtester/blob/m
 - **stressapptest** (optional: auto mode silently skips if absent): [github.com/stressapptest/stressapptest](https://github.com/stressapptest/stressapptest)
 - Linux kernel 3.14+ (for `MemAvailable` in `/proc/meminfo`; older kernels require `--ram-type free` or `--ram-type total`)
 - `lscpu` (from util-linux; falls back to `nproc` from coreutils)
+- `numactl` (optional: required only for `--numa-node`)
+- `taskset` (from util-linux; required only for `--pin`)
 - EDAC support (optional: gracefully skipped if absent)
 
 Install dependencies from your distribution's package manager or build from source:
@@ -166,6 +170,8 @@ Options:
   --log-dir DIR            Directory for log files (default: /tmp/pmemtester.PID)
   --iterations N           Number of memtester iterations (default: 1)
   --threads N              Number of memtester instances to run (default: auto-detect physical cores)
+  --numa-node N            Constrain testing to NUMA node N (requires numactl)
+  --pin                    Pin each memtester to a specific physical CPU core (uses taskset)
   --allow-ce               Allow correctable EDAC errors (CE); only fail on uncorrectable (UE)
   --stop-on-error          Stop immediately when any error is detected (default: wait for all threads)
   --color MODE             Coloured output: auto (default), on, off
@@ -254,23 +260,50 @@ sudo pmemtester --size 1024K
 
 When using `--size`, the `--ram-type` flag is accepted but has no effect (the size is absolute, not relative to system RAM).
 
-### Single-socket testing on a multi-socket server
+### NUMA-Aware Testing
 
-On a running multi-socket server, you may want to test one NUMA node at a time to maintain partial availability. pmemtester doesn't currently have built-in NUMA support, but you can use `numactl` to constrain it to a single socket:
+On multi-socket servers, test one NUMA node at a time to maintain partial availability:
 
 ```bash
-# Test socket 0 only (CPUs and memory bound to NUMA node 0)
-sudo numactl --cpunodebind=0 --membind=0 pmemtester --percent 90
+# Test NUMA node 0 only (CPUs and memory bound to node 0)
+sudo pmemtester --numa-node 0 --percent 90
 
-# Test socket 1 only
-sudo numactl --cpunodebind=1 --membind=1 pmemtester --percent 90
+# Test NUMA node 1 only
+sudo pmemtester --numa-node 1 --percent 90
+
+# Test node 0 with CPU pinning for fully reproducible results
+sudo pmemtester --numa-node 0 --pin --percent 90
 ```
 
-This binds both the CPU threads and memory allocation to the specified NUMA node, so only that socket's RAM is tested. The other socket remains fully available for workloads.
+The `--numa-node N` flag uses `numactl --cpunodebind=N --membind=N` to constrain both CPU threads and memory allocation to the specified NUMA node. The core count is automatically set to the number of physical cores on that node. The other socket remains fully available for workloads.
 
-**Note:** `--percent 90` in this case applies to the available memory on that NUMA node, not the whole system. Check per-node memory with `numactl --hardware`.
+**Note:** `--percent 90` in this case applies to the available memory on the whole system (not per-node). Check per-node memory with `numactl --hardware`.
 
-**CPU-less NUMA nodes:** On systems with HBM or CXL-attached memory (e.g., NVIDIA Grace Blackwell), some NUMA nodes have memory but no CPUs. You can still test them by borrowing CPUs from another node. See [FAQ: How do I test HBM or other memory on CPU-less NUMA nodes?](FAQ.md#how-do-i-test-hbm-or-other-memory-on-cpu-less-numa-nodes)
+**Combined with `--threads`:** If `--threads T` exceeds the node's core count, a warning is printed but execution proceeds (useful for testing memory bandwidth under oversubscription).
+
+**CPU-less NUMA nodes:** On systems with HBM or CXL-attached memory (e.g., NVIDIA Grace Blackwell), some NUMA nodes have memory but no CPUs. pmemtester will error with a suggestion to use `numactl --membind=N` manually. See [FAQ: How do I test HBM or other memory on CPU-less NUMA nodes?](FAQ.md#how-do-i-test-hbm-or-other-memory-on-cpu-less-numa-nodes)
+
+### CPU Pinning
+
+The `--pin` flag pins each memtester instance to a specific physical CPU core using `taskset -c <cpu>`:
+
+```bash
+# Pin each memtester to its own physical core
+sudo pmemtester --pin --percent 90
+
+# Pin to cores on NUMA node 0
+sudo pmemtester --numa-node 0 --pin --percent 90
+```
+
+Benefits:
+- Eliminates scheduler migration — each memtester stays on its assigned core for the full run
+- Combined with `--numa-node`, guarantees NUMA-local memory access
+- Makes results reproducible across runs (same core-to-memory mapping every time)
+- Enables per-core performance comparison (identify a weak core or memory channel)
+
+CPU-to-core mapping uses `lscpu -b -p=Socket,Core,CPU,Node` to identify one logical CPU per physical core (picking the lowest CPU ID for each unique socket,core pair). When combined with `--numa-node`, only CPUs on that node are selected.
+
+stressapptest is also wrapped: with `--pin`, it gets `taskset -c <csv>` with all pinned CPUs; with `--numa-node`, it gets `numactl --cpunodebind=N --membind=N`.
 
 ### Time estimation
 
@@ -388,7 +421,7 @@ test/
 │   └── install.bats                     # Install target tests (MEMTESTER_DIR/STRESSAPPTEST_DIR patching)
 ├── smoke/
 │   └── smoke_test.bats                  # Real-system smoke tests (requires real binaries)
-├── fixtures/                            # Synthetic /proc/meminfo, EDAC sysfs trees
+├── fixtures/                            # Synthetic /proc/meminfo, EDAC sysfs, NUMA sysfs
 │   ├── proc_meminfo_normal
 │   ├── proc_meminfo_low
 │   ├── proc_meminfo_no_available
@@ -398,7 +431,9 @@ test/
 │   ├── edac_counters_ue_only/
 │   ├── edac_counters_ce_and_ue/
 │   ├── edac_messages_clean.txt
-│   └── edac_messages_errors.txt
+│   ├── edac_messages_errors.txt
+│   ├── sys_node_single/                 # Single NUMA node fixture
+│   └── sys_node_2node/                  # Dual NUMA node fixture
 └── test_helper/
     ├── common_setup.bash                # Shared test setup
     ├── mock_helpers.bash                # Mock creation utilities
@@ -553,7 +588,11 @@ This is an important case: memtester's deterministic patterns found no stuck bit
 ```workflow
 parse_args --> validate_args --> color_init --> find_memtester --> resolve_stressapptest
     --> [if --size: parse_size_to_kb | else: decimal_to_millipercent --> calculate_test_ram_kb_milli]
-    --> get_core_count --> [if --threads N: override core_count] --> divide_ram_per_core_mb
+    --> get_core_count
+    --> [if --numa-node N: get_node_core_count(N), error on CPU-less nodes]
+    --> [if --threads T: override core_count, warn if T > node cores]
+    --> [if --pin: get_physical_cpu_list([node]) --> populate CPU_LIST]
+    --> divide_ram_per_core_mb
     --> validate_ram_params --> check_memlock_sufficient --> init_logs
     --> [report binary detection]
     --> [EDAC before snapshot]
@@ -571,7 +610,7 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-451 tests (356 unit + 89 integration + 6 smoke).
+501 tests (397 unit + 98 integration + 6 smoke).
 
 ```bash
 make test              # Run all tests (unit + integration)

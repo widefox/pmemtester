@@ -151,3 +151,92 @@ teardown() {
     # Should work without second argument (backwards compat)
     wait_and_collect "$TEST_LOG_DIR"
 }
+
+# --- CPU pinning and NUMA wrapping tests ---
+
+@test "run_memtester_instance without cpu_id or numa_node runs directly" {
+    create_mock memtester 'echo "args: $*"; exit 0'
+    run run_memtester_instance "${MOCK_DIR}/memtester" "256M" 1 0 "$TEST_LOG_DIR" "" ""
+    assert_success
+    # Should contain memtester output, no taskset/numactl
+    [[ -f "${TEST_LOG_DIR}/thread_0.log" ]]
+    ! grep -q "taskset" "${TEST_LOG_DIR}/thread_0.log"
+    ! grep -q "numactl" "${TEST_LOG_DIR}/thread_0.log"
+}
+
+@test "run_memtester_instance with cpu_id wraps with taskset" {
+    local wrapper_log="${TEST_LOG_DIR}/wrapper.log"
+    create_mock taskset 'echo "TASKSET: $*" >> '"${wrapper_log}"'; shift; shift; exec "$@"'
+    create_mock memtester 'echo "memtester ran"; exit 0'
+    run run_memtester_instance "${MOCK_DIR}/memtester" "256M" 1 0 "$TEST_LOG_DIR" "3" ""
+    assert_success
+    [[ -f "$wrapper_log" ]]
+    grep -q "TASKSET:.*-c 3" "$wrapper_log"
+}
+
+@test "run_memtester_instance with numa_node wraps with numactl" {
+    local wrapper_log="${TEST_LOG_DIR}/wrapper.log"
+    create_mock numactl 'echo "NUMACTL: $*" >> '"${wrapper_log}"'; shift; shift; exec "$@"'
+    create_mock memtester 'echo "memtester ran"; exit 0'
+    run run_memtester_instance "${MOCK_DIR}/memtester" "256M" 1 0 "$TEST_LOG_DIR" "" "1"
+    assert_success
+    [[ -f "$wrapper_log" ]]
+    grep -q "NUMACTL:.*--cpunodebind=1 --membind=1" "$wrapper_log"
+}
+
+@test "run_memtester_instance with both wraps numactl then taskset" {
+    local wrapper_log="${TEST_LOG_DIR}/wrapper.log"
+    create_mock numactl 'echo "NUMACTL: $*" >> '"${wrapper_log}"'; shift; shift; exec "$@"'
+    create_mock taskset 'echo "TASKSET: $*" >> '"${wrapper_log}"'; shift; shift; exec "$@"'
+    create_mock memtester 'echo "memtester ran"; exit 0'
+    run run_memtester_instance "${MOCK_DIR}/memtester" "256M" 1 0 "$TEST_LOG_DIR" "4" "0"
+    assert_success
+    [[ -f "$wrapper_log" ]]
+    grep -q "NUMACTL:" "$wrapper_log"
+    grep -q "TASKSET:" "$wrapper_log"
+}
+
+@test "run_memtester_instance with empty strings runs directly" {
+    create_mock memtester 'echo "direct run"; exit 0'
+    run run_memtester_instance "${MOCK_DIR}/memtester" "256M" 1 0 "$TEST_LOG_DIR" "" ""
+    assert_success
+}
+
+@test "run_all_memtesters with CPU_LIST passes cpu_id per thread" {
+    local wrapper_log="${TEST_LOG_DIR}/wrapper.log"
+    : > "$wrapper_log"
+    create_mock taskset 'echo "TASKSET: $*" >> '"${wrapper_log}"'; shift; shift; exec "$@"'
+    create_mock memtester 'echo "pass"; exit 0'
+    CPU_LIST=(0 2 4)
+    NUMA_NODE=""
+    run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 3 "$TEST_LOG_DIR"
+    wait_and_collect "$TEST_LOG_DIR"
+    grep -q "TASKSET:.*-c 0" "$wrapper_log"
+    grep -q "TASKSET:.*-c 2" "$wrapper_log"
+    grep -q "TASKSET:.*-c 4" "$wrapper_log"
+}
+
+@test "run_all_memtesters with empty CPU_LIST and NUMA_NODE runs without wrapping" {
+    create_mock memtester 'echo "pass"; exit 0'
+    CPU_LIST=()
+    NUMA_NODE=""
+    run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 2 "$TEST_LOG_DIR"
+    wait_and_collect "$TEST_LOG_DIR"
+    [[ -f "${TEST_LOG_DIR}/thread_0.log" ]]
+    [[ -f "${TEST_LOG_DIR}/thread_1.log" ]]
+}
+
+@test "run_all_memtesters with NUMA_NODE wraps all threads" {
+    local wrapper_log="${TEST_LOG_DIR}/wrapper.log"
+    : > "$wrapper_log"
+    create_mock numactl 'echo "NUMACTL: $*" >> '"${wrapper_log}"'; shift; shift; exec "$@"'
+    create_mock memtester 'echo "pass"; exit 0'
+    CPU_LIST=()
+    NUMA_NODE="1"
+    run_all_memtesters "${MOCK_DIR}/memtester" "256M" 1 2 "$TEST_LOG_DIR"
+    wait_and_collect "$TEST_LOG_DIR"
+    # Both threads should be wrapped with numactl
+    local numactl_count
+    numactl_count=$(grep -c "NUMACTL:" "$wrapper_log")
+    [[ "$numactl_count" -eq 2 ]]
+}

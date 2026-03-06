@@ -57,6 +57,15 @@ make coverage
 
 # Disable time estimation calibration
 ./pmemtester --percent 80 --estimate off
+
+# Constrain testing to NUMA node 0 (requires numactl)
+./pmemtester --numa-node 0
+
+# Pin each memtester to a specific physical CPU core
+./pmemtester --pin
+
+# NUMA + pinning combined
+./pmemtester --numa-node 0 --pin
 ```
 
 ## Version Bump Checklist
@@ -93,23 +102,23 @@ lib/
 ├── math_utils.sh               # Integer arithmetic (ceiling_div, percentage_of, decimal_to_millipercent)
 ├── memlock.sh                  # Kernel memory lock limit checking and configuration
 ├── memtester_mgmt.sh           # Find and validate memtester binary
-├── parallel.sh                 # Background memtester launch, PID tracking, wait
+├── parallel.sh                 # Background memtester launch, PID tracking, wait, CPU pinning
 ├── ram_calc.sh                 # RAM allocation math (percentage, millipercent, per-core division)
 ├── stressapptest_mgmt.sh       # Find, validate, and run stressapptest binary
-├── system_detect.sh            # RAM and core count from /proc/meminfo and lscpu
+├── system_detect.sh            # RAM, core count, NUMA topology, physical CPU mapping
 ├── timing.sh                   # Timing, status output, phase formatting
 └── unit_convert.sh             # kB/MB/bytes conversions, parse_size_to_kb (K/M/G/T)
 ```
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → (if `--size`: `parse_size_to_kb` | else: `decimal_to_millipercent` → `calculate_test_ram_kb_milli`) → `get_core_count` → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection) → (adaptive calibration: `get_l3_cache_kb` → `run_calibration` → `estimate_duration` → `print_estimate`) → (EDAC before) → Phase 1: `run_all_memtesters` → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest`) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → (if `--size`: `parse_size_to_kb` | else: `decimal_to_millipercent` → `calculate_test_ram_kb_milli`) → `get_core_count` → (if `--numa-node N`: `get_node_core_count`, error on CPU-less nodes) → (if `--threads T`: override core_count, warn if T > node cores) → (if `--pin`: `get_physical_cpu_list` → populate `CPU_LIST`) → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection, NUMA/pin info) → (adaptive calibration: `get_l3_cache_kb` → `run_calibration` → `estimate_duration` → `print_estimate`) → (EDAC before) → Phase 1: `run_all_memtesters` (with per-thread `taskset`/`numactl` wrapping) → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest` with `taskset`/`numactl` wrapping) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
 
 ### Test Infrastructure
 
 - **Framework**: bats-core 1.13.0 with bats-support and bats-assert (git submodules)
-- **Mocking**: PATH-prepend mock scripts for external commands (`memtester`, `lscpu`, `nproc`, `dmesg`); environment variable overrides for files (`PROC_MEMINFO`, `EDAC_BASE`, `MOCK_ULIMIT_L`); function overrides for builtins (`_read_ulimit_l`)
-- **Fixtures**: `test/fixtures/` contains synthetic `/proc/meminfo` files and EDAC sysfs directory trees
+- **Mocking**: PATH-prepend mock scripts for external commands (`memtester`, `lscpu`, `nproc`, `dmesg`, `numactl`, `taskset`); environment variable overrides for files (`PROC_MEMINFO`, `EDAC_BASE`, `MOCK_ULIMIT_L`, `SYS_NODE_BASE`); function overrides for builtins (`_read_ulimit_l`)
+- **Fixtures**: `test/fixtures/` contains synthetic `/proc/meminfo` files, EDAC sysfs directory trees, and NUMA sysfs node directories
 - **Smoke tests**: `test/smoke/smoke_test.bats` runs against real binaries with `--percent 1`; skips when binaries are absent. Separate `make test-smoke` target keeps them out of the fast mocked suite.
 - **Coverage**: kcov 38+ with `--include-path=./lib,./pmemtester` (v35 cannot instrument bash `source`d files inside bats subshells; build from [source](https://github.com/SimonKagstrom/kcov) if distro version is too old)
 
@@ -135,6 +144,8 @@ Default settings must never crash the host:
 
 - `memtester` binary (not bundled)
 - `stressapptest` binary (optional: auto mode silently skips if absent)
+- `numactl` (optional: required only when `--numa-node` is used)
+- `taskset` (from util-linux; optional: required only when `--pin` is used)
 - Linux kernel with EDAC support (optional: gracefully skipped if absent)
 - Standard Linux utilities: `lscpu`, `nproc` (fallback), `dmesg`, `awk`, `find`, `diff`
 - Test tools: `bats` (1.13.0+), `kcov` (38+), `shellcheck` (0.10.0+)

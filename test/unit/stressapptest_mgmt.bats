@@ -165,3 +165,85 @@ MOCK
     run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR"
     grep -q "stderr error" "${TEST_DIR}/stressapptest.log"
 }
+
+# --- CPU pinning and NUMA wrapping tests ---
+
+@test "run_stressapptest without wrappers runs directly" {
+    cat > "${TEST_DIR}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${TEST_DIR}/stressapptest"
+    init_logs "$TEST_DIR" 0
+    run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR" "" ""
+    grep -q -- "-s 10" "${TEST_DIR}/stressapptest.log"
+    grep -q -- "-M 256" "${TEST_DIR}/stressapptest.log"
+}
+
+@test "run_stressapptest with numa_node wraps with numactl" {
+    local wrapper_log="${TEST_DIR}/wrapper.log"
+    cat > "${TEST_DIR}/numactl" <<MOCK
+#!/usr/bin/env bash
+echo "NUMACTL: \$*" >> "${wrapper_log}"
+shift; shift; exec "\$@"
+MOCK
+    chmod +x "${TEST_DIR}/numactl"
+    cat > "${TEST_DIR}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${TEST_DIR}/stressapptest"
+    init_logs "$TEST_DIR" 0
+    PATH="${TEST_DIR}:${PATH}" run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR" "" "1"
+    [[ -f "$wrapper_log" ]]
+    grep -q "NUMACTL:.*--cpunodebind=1 --membind=1" "$wrapper_log"
+}
+
+@test "run_stressapptest with cpu_list_csv wraps with taskset" {
+    local wrapper_log="${TEST_DIR}/wrapper.log"
+    cat > "${TEST_DIR}/taskset" <<MOCK
+#!/usr/bin/env bash
+echo "TASKSET: \$*" >> "${wrapper_log}"
+shift; shift; exec "\$@"
+MOCK
+    chmod +x "${TEST_DIR}/taskset"
+    cat > "${TEST_DIR}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${TEST_DIR}/stressapptest"
+    init_logs "$TEST_DIR" 0
+    PATH="${TEST_DIR}:${PATH}" run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR" "0,2,4" ""
+    [[ -f "$wrapper_log" ]]
+    grep -q "TASKSET:.*-c 0,2,4" "$wrapper_log"
+}
+
+@test "run_stressapptest with both wraps numactl then taskset" {
+    local wrapper_log="${TEST_DIR}/wrapper.log"
+    cat > "${TEST_DIR}/numactl" <<MOCK
+#!/usr/bin/env bash
+echo "NUMACTL: \$*" >> "${wrapper_log}"
+shift; shift; exec "\$@"
+MOCK
+    chmod +x "${TEST_DIR}/numactl"
+    cat > "${TEST_DIR}/taskset" <<MOCK
+#!/usr/bin/env bash
+echo "TASKSET: \$*" >> "${wrapper_log}"
+shift; shift; exec "\$@"
+MOCK
+    chmod +x "${TEST_DIR}/taskset"
+    cat > "${TEST_DIR}/stressapptest" <<'MOCK'
+#!/usr/bin/env bash
+echo "args: $*"
+exit 0
+MOCK
+    chmod +x "${TEST_DIR}/stressapptest"
+    init_logs "$TEST_DIR" 0
+    PATH="${TEST_DIR}:${PATH}" run_stressapptest "${TEST_DIR}/stressapptest" 10 256 "$TEST_DIR" "0,2" "0"
+    [[ -f "$wrapper_log" ]]
+    grep -q "NUMACTL:" "$wrapper_log"
+    grep -q "TASKSET:" "$wrapper_log"
+}

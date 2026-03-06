@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.7 (2026-03-06)
+
+### New features
+
+- **`--numa-node N`**: Constrain testing to a specific NUMA node. Wraps each memtester instance and stressapptest with `numactl --cpunodebind=N --membind=N`. Auto-detects the node's physical core count and adjusts thread count accordingly. CPU-less NUMA nodes (e.g., HBM) produce an error with a `numactl --membind=N` workaround suggestion. Requires `numactl` to be installed.
+- **`--pin`**: Pin each memtester instance to a specific physical CPU core via `taskset -c <cpu_id>`. Uses `lscpu -b -p=Socket,Core,CPU,Node` to map physical cores to the lowest logical CPU ID per unique (Socket,Core) pair. Stressapptest is wrapped with `taskset -c <csv>` for all pinned CPUs. Eliminates scheduler migration for reproducible results.
+
+### New CLI flags
+
+- `--numa-node N`: Constrain testing to NUMA node N (requires `numactl`)
+- `--pin`: Pin each memtester to a specific physical CPU core (uses `taskset`)
+
+### New functions
+
+- `validate_numa_node()` in `system_detect.sh`: Validate NUMA node exists in sysfs and numactl is available
+- `get_physical_cpu_list()` in `system_detect.sh`: Map physical cores to lowest logical CPU IDs via lscpu, with optional NUMA node filter
+- `get_node_core_count()` in `system_detect.sh`: Count physical cores on a NUMA node
+
+### Flag interactions
+
+| Flags | Effect |
+|-------|--------|
+| `--numa-node N` | numactl wraps each memtester and stressapptest; core count = node's physical cores |
+| `--pin` | taskset wraps each memtester with one CPU per physical core; stressapptest gets taskset with CSV |
+| `--numa-node N --pin` | Both: numactl outermost, taskset inner; CPUs filtered to node N |
+| `--threads T --numa-node N` | T threads on node N; warns if T > node's core count |
+| `--threads T --pin` | T threads pinned to first T physical CPUs |
+
+### Documentation
+
+- Added `--numa-node` and `--pin` flags to README features, usage, and execution flow
+- Added "NUMA-Aware Testing" and "CPU Pinning" sections to README
+- Updated CLAUDE.md execution flow, dependencies, and source layout descriptions
+- Marked TODO items #3 (NUMA Locality) as partially complete and #5 (Thread Pinning) as complete
+- Updated test counts and fixtures list
+
 ## v0.6 (2026-03-02)
 
 ### New features

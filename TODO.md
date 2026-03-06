@@ -30,14 +30,18 @@ Considerations:
 - `ulimit -l` memory locking behavior may differ across platforms
 - EDAC_GHES (firmware-first) may be the only EDAC path on some ARM64 servers
 
-## 3. NUMA Locality
+## 3. NUMA Locality (partially complete)
 
-Document and potentially improve NUMA behaviour:
+Single-node NUMA support is implemented (v0.7):
 
-- pmemtester currently uses `lscpu` for core count and lets the kernel allocate memory freely across NUMA nodes
-- Memory allocation is not NUMA-aware -- the kernel's default policy (local allocation) means each process likely gets memory from its local node, but this is not guaranteed
-- For explicit per-node testing, users can wrap pmemtester with `numactl --cpunodebind=N --membind=N` (documented in README)
-- Consider adding a `--numa-node N` flag to constrain testing to a specific NUMA node natively
+- [x] `--numa-node N` flag constrains testing to a specific NUMA node via `numactl --cpunodebind=N --membind=N`
+- [x] Auto-detects node core count and adjusts thread count accordingly
+- [x] CPU-less NUMA nodes (e.g., HBM) error with a message suggesting manual `numactl --membind=N` workaround
+- [x] Integrates with `--threads` (warns if T > node cores) and `--pin` (filters CPUs to node)
+- [x] Wraps both memtester instances and stressapptest
+
+Remaining:
+
 - Support multiple NUMA nodes: `--numa-node 1,2,3` to test several nodes sequentially (or in parallel across borrowed CPU cores). Use case: Grace Blackwell HBM spans multiple CPU-less NUMA nodes; testing all HBM in one command avoids manual repetition. See [FAQ.md](FAQ.md#how-do-i-test-hbm-or-other-memory-on-cpu-less-numa-nodes) for the current manual workflow.
 - Consider adding a `--per-node` mode that tests each NUMA node sequentially and reports per-node results
 
@@ -50,16 +54,16 @@ pmemtester currently treats all CPU threads homogeneously:
 - Document this assumption and any edge cases (e.g., E-cores with smaller cache may exhibit different memory access patterns)
 - Consider whether thread pinning (`taskset`) to specific core types would improve test coverage or reproducibility
 
-## 5. Thread Pinning
+## 5. Thread Pinning (complete)
 
-Pin each memtester instance to a specific physical core with `taskset` or `sched_setaffinity`:
+Implemented in v0.7:
 
-- Eliminates scheduler migration entirely -- each memtester stays on its assigned core for the full run
-- Guarantees NUMA-local memory access (combined with `numactl --membind` or `mbind`)
-- Makes results reproducible across runs (same core-to-memory mapping every time)
-- Enables per-core performance comparison (identify a weak core or memory channel)
-- Could use `lscpu -b -p=Socket,Core,CPU` to map physical cores to logical CPU IDs for pinning
-- Consider a `--pin` flag to enable pinning (off by default to avoid surprising users)
+- [x] `--pin` flag pins each memtester to a specific physical CPU core via `taskset -c <cpu_id>`
+- [x] Uses `lscpu -b -p=Socket,Core,CPU,Node` to map physical cores to lowest logical CPU ID
+- [x] Eliminates scheduler migration -- each memtester stays on its assigned core
+- [x] Makes results reproducible across runs (same core-to-memory mapping)
+- [x] Combines with `--numa-node N` to filter CPUs to a specific node
+- [x] Stressapptest also wrapped with `taskset -c <csv>` for full pinning
 
 ## 7. Sequential Rolling RAM Test
 

@@ -33,6 +33,10 @@ ESTIMATE_MODE="auto"
 STOP_ON_ERROR=0
 # shellcheck disable=SC2034
 THREADS=0
+# shellcheck disable=SC2034
+NUMA_NODE=""
+# shellcheck disable=SC2034
+PIN=0
 
 # usage: print help text
 usage() {
@@ -54,6 +58,8 @@ Options:
   --estimate MODE     Time estimate calibration: auto (default), on, off
   --stop-on-error     Stop immediately when any error is detected (default: wait for all threads)
   --threads N         Number of memtester instances to run (default: auto-detect physical cores)
+  --numa-node N       Constrain testing to NUMA node N (requires numactl)
+  --pin               Pin each memtester to a specific physical CPU core (uses taskset)
   --version           Show version
   --help              Show this help message
 EOF
@@ -78,6 +84,8 @@ parse_args() {
             --estimate) ESTIMATE_MODE="$2"; shift 2 ;;
             --stop-on-error) STOP_ON_ERROR=1; shift ;;
             --threads)    THREADS="$2"; shift 2 ;;
+            --numa-node)  NUMA_NODE="$2"; shift 2 ;;
+            --pin)        PIN=1; shift ;;
             --version)    echo "pmemtester ${pmemtester_version:-unknown}"; exit 0 ;;
             --help)       usage; exit 0 ;;
             *)
@@ -161,6 +169,21 @@ validate_args() {
         logical_cpus="$(nproc 2>/dev/null || echo 0)"
         if [[ "$logical_cpus" -gt 0 ]] && [[ "$THREADS" -gt "$logical_cpus" ]]; then
             echo "WARNING: --threads ${THREADS} exceeds logical CPU count (${logical_cpus})" >&2
+        fi
+    fi
+    if [[ -n "${NUMA_NODE:-}" ]]; then
+        if ! [[ "$NUMA_NODE" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: --numa-node must be a non-negative integer (got ${NUMA_NODE})" >&2
+            return 1
+        fi
+        local sys_node_base="${SYS_NODE_BASE:-/sys/devices/system/node}"
+        if [[ ! -d "${sys_node_base}/node${NUMA_NODE}" ]]; then
+            echo "ERROR: NUMA node ${NUMA_NODE} does not exist (${sys_node_base}/node${NUMA_NODE}/ not found)" >&2
+            return 1
+        fi
+        if ! command -v numactl > /dev/null 2>&1; then
+            echo "ERROR: --numa-node requires numactl but it is not installed" >&2
+            return 1
         fi
     fi
     return 0

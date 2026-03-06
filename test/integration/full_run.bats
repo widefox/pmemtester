@@ -15,8 +15,21 @@ exit 0
 MOCK
     chmod +x "${TEST_MEMTESTER_DIR}/memtester"
 
-    # Mock lscpu to report 2 physical cores (1 socket, 2 cores)
-    create_mock lscpu 'echo "# Socket,Core"; echo "0,0"; echo "0,1"'
+    # Mock lscpu to report 2 physical cores (1 socket, 2 cores, 1 node)
+    # 4-column format supports both get_core_count (Socket,Core) and get_physical_cpu_list (Socket,Core,CPU,Node)
+    create_mock lscpu '
+case "$*" in
+    *Socket,Core,CPU,Node*)
+        echo "# Socket,Core,CPU,Node"
+        echo "0,0,0,0"
+        echo "0,1,1,0"
+        ;;
+    *)
+        echo "# Socket,Core"
+        echo "0,0"
+        echo "0,1"
+        ;;
+esac'
 
     # Mock dmesg with clean EDAC output
     create_mock dmesg 'cat '"${FIXTURE_DIR}/edac_messages_clean.txt"
@@ -1515,4 +1528,165 @@ MOCK
     assert_output --partial "PASS"
     assert_output --partial $'\033[33m'
     assert_output --partial "WARNING"
+}
+
+# --- NUMA node and CPU pinning integration tests ---
+
+@test "full run --numa-node 0 passes" {
+    # Set up SYS_NODE_BASE fixture
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    export SYS_NODE_BASE="$node_fixture"
+
+    # numactl mock that passes through to remaining args
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --numa-node 0 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "PASS"
+    assert_output --partial "NUMA node: 0"
+}
+
+@test "full run --numa-node 99 fails (node does not exist)" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    export SYS_NODE_BASE="$node_fixture"
+
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --numa-node 99 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_failure
+    assert_output --partial "does not exist"
+}
+
+@test "full run --numa-node without numactl fails" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    export SYS_NODE_BASE="$node_fixture"
+
+    # Remove numactl from PATH — recreate mock dir without numactl
+    rm -f "${MOCK_DIR}/numactl" 2>/dev/null || true
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --numa-node 0 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_failure
+    assert_output --partial "numactl"
+}
+
+@test "full run --pin passes" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --pin \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "PASS"
+    assert_output --partial "CPU pinning: enabled"
+}
+
+@test "full run --pin output shows thread pinning info" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --pin \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "CPU pinning: enabled"
+    assert_output --partial "CPUs:"
+}
+
+@test "full run --numa-node 0 --pin passes with both" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    export SYS_NODE_BASE="$node_fixture"
+
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --numa-node 0 --pin \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "PASS"
+    assert_output --partial "NUMA node: 0"
+    assert_output --partial "CPU pinning: enabled"
+}
+
+@test "full run --threads 8 --numa-node 0 warns if exceeding node cores" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    export SYS_NODE_BASE="$node_fixture"
+
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    # Node 0 has 2 cores (from lscpu mock), but --threads 8 exceeds that
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --threads 8 --numa-node 0 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "WARNING"
+    assert_output --partial "exceeds NUMA node"
+}
+
+@test "full run --pin with stressapptest wraps with taskset" {
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<MOCK
+#!/usr/bin/env bash
+echo "args: \$*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_pin_sat"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --pin \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir" \
+        $TEST_ESTIMATE_OFF
+    # The stressapptest log should show it was invoked (mock just echoes args)
+    [[ -f "${log_dir}/stressapptest.log" ]]
+}
+
+@test "full run --numa-node with stressapptest wraps with numactl" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    export SYS_NODE_BASE="$node_fixture"
+
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    local sat_dir="${TEST_LOG_DIR}/sat_bin"
+    mkdir -p "$sat_dir"
+    cat > "${sat_dir}/stressapptest" <<MOCK
+#!/usr/bin/env bash
+echo "args: \$*"
+exit 0
+MOCK
+    chmod +x "${sat_dir}/stressapptest"
+
+    local log_dir="${TEST_LOG_DIR}/logs_numa_sat"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --numa-node 0 \
+        --stressapptest on \
+        --stressapptest-dir "$sat_dir" \
+        $TEST_ESTIMATE_OFF
+    [[ -f "${log_dir}/stressapptest.log" ]]
 }

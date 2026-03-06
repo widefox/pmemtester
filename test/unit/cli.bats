@@ -630,3 +630,133 @@ setup() {
     assert_success
     assert_output --partial "--threads"
 }
+
+# --- --numa-node flag tests ---
+
+@test "parse_args default NUMA_NODE is empty" {
+    parse_args
+    [[ -z "$NUMA_NODE" ]]
+}
+
+@test "parse_args --numa-node 0 sets NUMA_NODE" {
+    parse_args --numa-node 0
+    [[ "$NUMA_NODE" == "0" ]]
+}
+
+@test "parse_args --numa-node 1 sets NUMA_NODE" {
+    parse_args --numa-node 1
+    [[ "$NUMA_NODE" == "1" ]]
+}
+
+@test "parse_args --numa-node combined with other flags" {
+    parse_args --percent 80 --numa-node 0 --iterations 3
+    [[ "$NUMA_NODE" == "0" ]]
+    [[ "$PERCENT" == "80" ]]
+    [[ "$ITERATIONS" == "3" ]]
+}
+
+# --- --pin flag tests ---
+
+@test "parse_args default PIN is 0" {
+    parse_args
+    [[ "$PIN" == "0" ]]
+}
+
+@test "parse_args --pin sets PIN to 1" {
+    parse_args --pin
+    [[ "$PIN" == "1" ]]
+}
+
+@test "parse_args --pin combined with other flags" {
+    parse_args --percent 80 --pin --iterations 3
+    [[ "$PIN" == "1" ]]
+    [[ "$PERCENT" == "80" ]]
+    [[ "$ITERATIONS" == "3" ]]
+}
+
+@test "parse_args --pin --numa-node combined" {
+    parse_args --pin --numa-node 1
+    [[ "$PIN" == "1" ]]
+    [[ "$NUMA_NODE" == "1" ]]
+}
+
+# --- --numa-node validation tests ---
+
+@test "validate_args --numa-node -1 fails" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=0 NUMA_NODE="-1" PIN=0
+    run validate_args
+    assert_failure
+    assert_output --partial "numa-node"
+}
+
+@test "validate_args --numa-node abc fails" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=0 NUMA_NODE="abc" PIN=0
+    run validate_args
+    assert_failure
+    assert_output --partial "numa-node"
+}
+
+@test "validate_args --numa-node 0 with valid sysfs passes" {
+    local node_fixture="${BATS_TEST_TMPDIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    printf '#!/bin/sh\ntrue\n' > "${mock_bin}/numactl"
+    chmod +x "${mock_bin}/numactl"
+    PATH="${mock_bin}:${PATH}" \
+    SYS_NODE_BASE="$node_fixture" \
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=0 NUMA_NODE="0" PIN=0
+    run validate_args
+    assert_success
+}
+
+@test "validate_args --numa-node 99 fails (node does not exist)" {
+    local node_fixture="${BATS_TEST_TMPDIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    printf '#!/bin/sh\ntrue\n' > "${mock_bin}/numactl"
+    chmod +x "${mock_bin}/numactl"
+    PATH="${mock_bin}:${PATH}" \
+    SYS_NODE_BASE="$node_fixture" \
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=0 NUMA_NODE="99" PIN=0
+    run validate_args
+    assert_failure
+    assert_output --partial "does not exist"
+}
+
+@test "validate_args --numa-node without numactl fails" {
+    local node_fixture="${BATS_TEST_TMPDIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin_empty"
+    mkdir -p "$mock_bin"
+    # No numactl in this PATH
+    PATH="${mock_bin}:/usr/bin:/bin" \
+    SYS_NODE_BASE="$node_fixture" \
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=0 NUMA_NODE="0" PIN=0
+    run validate_args
+    assert_failure
+    assert_output --partial "numactl"
+}
+
+@test "usage includes --numa-node" {
+    run usage
+    assert_success
+    assert_output --partial "--numa-node"
+}
+
+@test "usage includes --pin" {
+    run usage
+    assert_success
+    assert_output --partial "--pin"
+}

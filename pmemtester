@@ -53,11 +53,39 @@ main() {
         ram_kb="$(calculate_test_ram_kb_milli "$millipercent" "$RAM_TYPE")"
     fi
     core_count="$(get_core_count)"
+
+    # NUMA node handling: override core count with node's physical cores
+    if [[ -n "${NUMA_NODE:-}" ]]; then
+        local node_cores
+        node_cores="$(get_node_core_count "$NUMA_NODE")"
+        if [[ "$node_cores" -eq 0 ]]; then
+            echo "ERROR: NUMA node ${NUMA_NODE} has no CPUs. For CPU-less NUMA nodes (e.g., HBM), use: numactl --membind=${NUMA_NODE} pmemtester [OPTIONS]" >&2
+            return 1
+        fi
+        core_count="$node_cores"
+    fi
+
+    # Thread override (integrates with NUMA)
     local threads_override_msg=""
     if [[ "$THREADS" -gt 0 ]]; then
         threads_override_msg="Thread override: using --threads ${THREADS} (auto-detected: ${core_count} cores)"
+        if [[ -n "${NUMA_NODE:-}" ]] && [[ "$THREADS" -gt "$core_count" ]]; then
+            echo "WARNING: --threads ${THREADS} exceeds NUMA node ${NUMA_NODE} core count (${core_count})" >&2
+        fi
         core_count="$THREADS"
     fi
+
+    # CPU pinning: populate CPU_LIST for per-thread taskset wrapping
+    if [[ "$PIN" -eq 1 ]]; then
+        local cpu_list_str
+        cpu_list_str="$(get_physical_cpu_list "${NUMA_NODE:-}")"
+        read -ra CPU_LIST <<< "$cpu_list_str"
+        # If --threads not set, use pinned CPU count as core_count
+        if [[ "$THREADS" -eq 0 ]]; then
+            core_count="${#CPU_LIST[@]}"
+        fi
+    fi
+
     ram_per_core_mb="$(divide_ram_per_core_mb "$ram_kb" "$core_count")"
     validate_ram_params "$core_count" "$ram_per_core_mb"
 
@@ -70,6 +98,13 @@ main() {
     init_logs "$log_dir" "$core_count"
     if [[ -n "$threads_override_msg" ]]; then
         print_status "$threads_override_msg" "$log_dir"
+    fi
+    # Report NUMA and pinning info
+    if [[ -n "${NUMA_NODE:-}" ]]; then
+        print_status "NUMA node: ${NUMA_NODE}" "$log_dir"
+    fi
+    if [[ "$PIN" -eq 1 ]]; then
+        print_status "CPU pinning: enabled (CPUs: ${CPU_LIST[*]})" "$log_dir"
     fi
 
     # Report binary detection
@@ -190,7 +225,13 @@ main() {
             print_status "Phase 2 (stressapptest) started: ${total_mb}MB, ${sat_seconds}s" "$log_dir"
             print_phase_estimate "Phase 2" "$sat_seconds" "$log_dir"
             local phase2_start=$SECONDS
-            run_stressapptest "$stressapptest_path" "$sat_seconds" "$total_mb" "$log_dir" || stressapptest_result=1
+            # Build CPU list CSV for stressapptest pinning
+            local sat_cpu_csv=""
+            if [[ "${#CPU_LIST[@]}" -gt 0 ]]; then
+                sat_cpu_csv="$(IFS=,; echo "${CPU_LIST[*]}")"
+            fi
+            run_stressapptest "$stressapptest_path" "$sat_seconds" "$total_mb" "$log_dir" \
+                "$sat_cpu_csv" "${NUMA_NODE:-}" || stressapptest_result=1
             local phase2_elapsed=$(( SECONDS - phase2_start ))
             if [[ "$stressapptest_result" -eq 0 ]]; then
                 print_status "Phase 2 (stressapptest) finished: PASSED ($(format_duration "$phase2_elapsed"))" "$log_dir"

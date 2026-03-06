@@ -33,14 +33,25 @@ validate_stressapptest() {
 
 # run_stressapptest: execute stressapptest and log results
 # Thread count is not specified — stressapptest auto-detects from logical CPUs.
-# Usage: run_stressapptest <path> <seconds> <size_mb> <log_dir>
+# Usage: run_stressapptest <path> <seconds> <size_mb> <log_dir> [cpu_list_csv] [numa_node]
 run_stressapptest() {
     local path="$1" seconds="$2" size_mb="$3" log_dir="$4"
+    local cpu_list_csv="${5:-}" numa_node="${6:-}"
     local log_file="${log_dir}/stressapptest.log"
+
+    # Build command array with optional wrappers
+    local cmd=()
+    if [[ -n "$numa_node" ]]; then
+        cmd+=(numactl "--cpunodebind=${numa_node}" "--membind=${numa_node}")
+    fi
+    if [[ -n "$cpu_list_csv" ]]; then
+        cmd+=(taskset -c "$cpu_list_csv")
+    fi
+    cmd+=("$path" -s "$seconds" -M "$size_mb")
 
     log_master "Starting stressapptest: ${size_mb}MB, ${seconds}s" "$log_dir"
 
-    if "$path" -s "$seconds" -M "$size_mb" > "$log_file" 2>&1; then
+    if "${cmd[@]}" > "$log_file" 2>&1; then
         log_master "stressapptest PASSED" "$log_dir"
         return 0
     else
