@@ -1690,3 +1690,35 @@ MOCK
         $TEST_ESTIMATE_OFF
     [[ -f "${log_dir}/stressapptest.log" ]]
 }
+
+# --- --check-deps integration tests ---
+
+@test "full run --check-deps shows all sections" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --check-deps
+    assert_success
+    assert_output --partial "pmemtester"
+    assert_output --partial "dependency check"
+    assert_output --partial "Required:"
+    assert_output --partial "Optional:"
+    assert_output --partial "System:"
+    assert_output --partial "memtester"
+    assert_output --partial "[OK]"
+}
+
+@test "full run --check-deps exits 0 with all required deps" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --check-deps
+    assert_success
+    assert_output --partial "All required dependencies found"
+}
+
+@test "full run --check-deps shows Physical cores" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --check-deps
+    assert_success
+    assert_output --partial "Physical cores"
+}

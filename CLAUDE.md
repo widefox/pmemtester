@@ -52,6 +52,9 @@ make coverage
 # Run with explicit size (K/M/G/T suffix required; mutually exclusive with --percent)
 ./pmemtester --size 256M
 
+# Check all dependencies before running
+./pmemtester --check-deps
+
 # Run with stressapptest forced on for 60 seconds
 ./pmemtester --percent 80 --stressapptest on --stressapptest-seconds 60
 

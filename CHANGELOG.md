@@ -6,11 +6,14 @@
 
 - **`--numa-node N`**: Constrain testing to a specific NUMA node. Wraps each memtester instance and stressapptest with `numactl --cpunodebind=N --membind=N`. Auto-detects the node's physical core count and adjusts thread count accordingly. CPU-less NUMA nodes (e.g., HBM) produce an error with a `numactl --membind=N` workaround suggestion. Requires `numactl` to be installed.
 - **`--pin`**: Pin each memtester instance to a specific physical CPU core via `taskset -c <cpu_id>`. Uses `lscpu -b -p=Socket,Core,CPU,Node` to map physical cores to the lowest logical CPU ID per unique (Socket,Core) pair. Stressapptest is wrapped with `taskset -c <csv>` for all pinned CPUs. Eliminates scheduler migration for reproducible results.
+- **`--check-deps`**: Diagnostic flag that checks all required and optional dependencies, displays versions, paths, and system capabilities (EDAC, NUMA, core count, memory lock limit), then exits. Returns 0 if all required dependencies are found, 1 otherwise.
+- **Manpage**: Hand-written `pmemtester.1` manpage installed by `make install` to `$(PREFIX)/share/man/man1/`.
 
 ### New CLI flags
 
 - `--numa-node N`: Constrain testing to NUMA node N (requires `numactl`)
 - `--pin`: Pin each memtester to a specific physical CPU core (uses `taskset`)
+- `--check-deps`: Check all dependencies, show versions and paths, then exit
 
 ### New functions
 

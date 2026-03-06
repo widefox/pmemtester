@@ -26,14 +26,16 @@ dist:
 	@mkdir -p dist
 	tar czf dist/$(NAME)-$(VERSION).tgz \
 		--transform='s,^,$(NAME)-$(VERSION)/,' \
-		pmemtester lib/ Makefile README.md CHANGELOG.md FAQ.md TODO.md PROMPT.md CLAUDE.md
+		pmemtester pmemtester.1 lib/ Makefile README.md CHANGELOG.md FAQ.md TODO.md PROMPT.md CLAUDE.md
 	@echo "Created dist/$(NAME)-$(VERSION).tgz"
 
 install:
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -d $(DESTDIR)$(PREFIX)/lib/$(NAME)
+	install -d $(DESTDIR)$(PREFIX)/share/man/man1
 	install -m 755 pmemtester $(DESTDIR)$(PREFIX)/bin/pmemtester
 	install -m 644 lib/*.sh $(DESTDIR)$(PREFIX)/lib/$(NAME)/
+	install -m 644 pmemtester.1 $(DESTDIR)$(PREFIX)/share/man/man1/pmemtester.1
 	@# Patch installed script to source from installed lib location
 	sed -i 's|"$${SCRIPT_DIR}"/lib|$(PREFIX)/lib/$(NAME)|' $(DESTDIR)$(PREFIX)/bin/pmemtester
 ifdef MEMTESTER_DIR
@@ -49,6 +51,7 @@ endif
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/pmemtester
 	rm -rf $(DESTDIR)$(PREFIX)/lib/$(NAME)
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/pmemtester.1
 	@echo "Uninstalled $(NAME) from $(PREFIX)"
 
 clean:

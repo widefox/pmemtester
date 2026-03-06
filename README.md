@@ -21,6 +21,7 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 - `--threads N`: override auto-detected core count (useful for single-socket testing or custom parallelism)
 - `--numa-node N`: constrain testing to a specific NUMA node (CPU and memory binding via numactl)
 - `--pin`: pin each memtester instance to a specific physical CPU core (via taskset) for reproducible results
+- `--check-deps`: verify all dependencies, show versions, paths, and system capabilities
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester, stressapptest, and EDAC results
 
@@ -95,11 +96,13 @@ apk add memtester                  # stressapptest: build from source
 ### Install pmemtester
 
 ```bash
-make install           # Install to /usr/local/bin (requires sudo)
+make install           # Install to /usr/local/bin + manpage (requires sudo)
 make install PREFIX=/opt/pmemtester   # Custom prefix
 make uninstall         # Remove installed files
 make dist              # Create .tgz distribution archive
 ```
+
+The manpage is installed to `$(PREFIX)/share/man/man1/pmemtester.1` and can be viewed with `man pmemtester`.
 
 ### Distro packaging
 
@@ -179,6 +182,7 @@ Options:
   --stressapptest-seconds N  stressapptest duration (0 = use memtester time, default: 0)
   --stressapptest-dir DIR  Directory containing stressapptest binary (default: /usr/local/bin)
   --estimate MODE          Time estimate calibration: auto (default), on, off
+  --check-deps             Check dependencies, show versions/paths/system info, then exit
   --version                Show version
   --help                   Show this help message
 ```
@@ -304,6 +308,16 @@ Benefits:
 CPU-to-core mapping uses `lscpu -b -p=Socket,Core,CPU,Node` to identify one logical CPU per physical core (picking the lowest CPU ID for each unique socket,core pair). When combined with `--numa-node`, only CPUs on that node are selected.
 
 stressapptest is also wrapped: with `--pin`, it gets `taskset -c <csv>` with all pinned CPUs; with `--numa-node`, it gets `numactl --cpunodebind=N --membind=N`.
+
+### Dependency check
+
+Before running a full test, verify that all required and optional dependencies are present:
+
+```bash
+sudo pmemtester --check-deps
+```
+
+This prints each dependency's path and version, system capabilities (EDAC, NUMA nodes, core count, memory lock limit), and exits 0 if all required dependencies are found.
 
 ### Time estimation
 
@@ -635,7 +649,7 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-501 tests (397 unit + 98 integration + 6 smoke).
+521 tests (414 unit + 101 integration + 6 smoke).
 
 ```bash
 make test              # Run all tests (unit + integration)

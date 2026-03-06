@@ -18,8 +18,15 @@ done
 
 main() {
     parse_args "$@"
-    validate_args
     color_init
+
+    # --check-deps: diagnostic report and exit (before validate_args)
+    if [[ "$CHECK_DEPS" -eq 1 ]]; then
+        check_deps
+        return $?
+    fi
+
+    validate_args
 
     local memtester_path
     memtester_path="$(find_memtester "$MEMTESTER_DIR")"

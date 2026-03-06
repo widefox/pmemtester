@@ -760,3 +760,361 @@ setup() {
     assert_success
     assert_output --partial "--pin"
 }
+
+# --- --check-deps flag tests ---
+
+@test "parse_args default CHECK_DEPS is 0" {
+    parse_args
+    [[ "$CHECK_DEPS" == "0" ]]
+}
+
+@test "parse_args --check-deps sets CHECK_DEPS to 1" {
+    parse_args --check-deps
+    [[ "$CHECK_DEPS" == "1" ]]
+}
+
+@test "usage includes --check-deps" {
+    run usage
+    assert_success
+    assert_output --partial "--check-deps"
+}
+
+@test "check_deps prints header with version" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    pmemtester_version="0.7"
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock %s"\n' "$cmd" > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "pmemtester 0.7 dependency check"
+}
+
+@test "check_deps shows Required section" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "Required:"
+}
+
+@test "check_deps shows Optional section" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "Optional:"
+}
+
+@test "check_deps shows System section" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "System:"
+}
+
+@test "check_deps shows OK for found required binary" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "[OK]"
+    assert_output --partial "memtester"
+}
+
+@test "check_deps shows MISSING for absent required binary" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    # All except memtester
+    for cmd in lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_failure
+    assert_output --partial "[MISSING]"
+}
+
+@test "check_deps exits 0 when all required deps present" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_success
+}
+
+@test "check_deps exits 1 when required dep missing" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    # Omit lscpu (required) — use exclusive PATH to hide real binaries
+    for cmd in memtester awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}" \
+    run check_deps
+    assert_failure
+}
+
+@test "check_deps shows NOT FOUND for absent optional binary" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    # All required present, omit stressapptest (optional)
+    for cmd in memtester lscpu awk find diff numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_success
+    assert_output --partial "[NOT FOUND]"
+}
+
+@test "check_deps shows /proc/meminfo status" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "/proc/meminfo"
+    assert_output --partial "MemTotal"
+}
+
+@test "check_deps shows EDAC status" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "EDAC"
+}
+
+@test "check_deps shows Physical cores count" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    # lscpu mock that returns core info
+    cat > "${mock_bin}/lscpu" <<'MOCK'
+#!/bin/sh
+echo "# Socket,Core"
+echo "0,0"
+echo "0,1"
+MOCK
+    chmod +x "${mock_bin}/lscpu"
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "Physical cores"
+    assert_output --partial "2"
+}
+
+@test "check_deps shows memory lock status" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "Memory lock"
+}
+
+@test "check_deps summary when all required present" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_success
+    assert_output --partial "All required dependencies found"
+}

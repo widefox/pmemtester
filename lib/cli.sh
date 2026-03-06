@@ -37,6 +37,8 @@ THREADS=0
 NUMA_NODE=""
 # shellcheck disable=SC2034
 PIN=0
+# shellcheck disable=SC2034
+CHECK_DEPS=0
 
 # usage: print help text
 usage() {
@@ -60,6 +62,7 @@ Options:
   --threads N         Number of memtester instances to run (default: auto-detect physical cores)
   --numa-node N       Constrain testing to NUMA node N (requires numactl)
   --pin               Pin each memtester to a specific physical CPU core (uses taskset)
+  --check-deps        Check all dependencies, show versions and paths, then exit
   --version           Show version
   --help              Show this help message
 EOF
@@ -86,6 +89,7 @@ parse_args() {
             --threads)    THREADS="$2"; shift 2 ;;
             --numa-node)  NUMA_NODE="$2"; shift 2 ;;
             --pin)        PIN=1; shift ;;
+            --check-deps) CHECK_DEPS=1; shift ;;
             --version)    echo "pmemtester ${pmemtester_version:-unknown}"; exit 0 ;;
             --help)       usage; exit 0 ;;
             *)
@@ -187,4 +191,149 @@ validate_args() {
         fi
     fi
     return 0
+}
+
+# _check_bin: check for a binary and print status line
+# Usage: _check_bin <name> <path_or_empty> <required>
+# Sets _check_bin_found=1 if found, 0 if not
+_check_bin() {
+    local name="$1" path="$2" required="$3"
+    # shellcheck disable=SC2034
+    _check_bin_found=0
+    if [[ -n "$path" ]] && [[ -x "$path" ]]; then
+        local version_str
+        version_str="$("$path" --version 2>&1 | head -1)" || version_str="(version unknown)"
+        printf "  %-16s %-40s %s  [OK]\n" "$name" "$path" "$version_str"
+        _check_bin_found=1
+    else
+        local label
+        if [[ "$required" == "required" ]]; then
+            label="${_C_RED}[MISSING]${_C_RESET}"
+        else
+            label="${_C_YELLOW}[NOT FOUND]${_C_RESET}"
+        fi
+        printf "  %-16s %-40s %s\n" "$name" "(not found)" "$label"
+    fi
+}
+
+# _check_cmd: check for a command in PATH and print status line
+# Usage: _check_cmd <name> <required>
+# Sets _check_cmd_found=1 if found, 0 if not
+_check_cmd() {
+    local name="$1" required="$2"
+    local path
+    # shellcheck disable=SC2034
+    _check_cmd_found=0
+    if path="$(command -v "$name" 2>/dev/null)"; then
+        local version_str
+        version_str="$("$name" --version 2>&1 | head -1)" || version_str="(version unknown)"
+        printf "  %-16s %-40s %s  [OK]\n" "$name" "$path" "$version_str"
+        _check_cmd_found=1
+    else
+        local label
+        if [[ "$required" == "required" ]]; then
+            label="${_C_RED}[MISSING]${_C_RESET}"
+        else
+            label="${_C_YELLOW}[NOT FOUND]${_C_RESET}"
+        fi
+        printf "  %-16s %-40s %s\n" "$name" "(not found)" "$label"
+    fi
+}
+
+# check_deps: check all dependencies and print diagnostic report
+# Requires: color.sh (for _C_GREEN/_C_RED/_C_YELLOW/_C_RESET),
+#           system_detect.sh (for get_core_count, PROC_MEMINFO, EDAC_BASE, SYS_NODE_BASE),
+#           memlock.sh (for _read_ulimit_l)
+# Exit 0 if all required deps found, 1 otherwise.
+check_deps() {
+    local missing=0
+
+    echo "pmemtester ${pmemtester_version:-unknown} dependency check"
+    echo ""
+
+    # --- Required ---
+    echo "Required:"
+
+    # memtester (searched in MEMTESTER_DIR)
+    local memtester_path="${MEMTESTER_DIR:-/usr/local/bin}/memtester"
+    _check_bin "memtester" "$memtester_path" "required"
+    [[ "$_check_bin_found" -eq 0 ]] && missing=1
+
+    for cmd in lscpu awk find diff; do
+        _check_cmd "$cmd" "required"
+        [[ "$_check_cmd_found" -eq 0 ]] && missing=1
+    done
+
+    echo ""
+
+    # --- Optional ---
+    echo "Optional:"
+
+    local stressapptest_path="${STRESSAPPTEST_DIR:-/usr/local/bin}/stressapptest"
+    _check_bin "stressapptest" "$stressapptest_path" "optional"
+
+    for cmd in numactl taskset dmesg nproc; do
+        _check_cmd "$cmd" "optional"
+    done
+
+    echo ""
+
+    # --- System ---
+    echo "System:"
+
+    # /proc/meminfo
+    local meminfo="${PROC_MEMINFO:-/proc/meminfo}"
+    if [[ -f "$meminfo" ]]; then
+        local mem_total mem_avail
+        mem_total="$(awk '/^MemTotal:/ { print $2 }' "$meminfo" 2>/dev/null)" || mem_total="?"
+        mem_avail="$(awk '/^MemAvailable:/ { print $2 }' "$meminfo" 2>/dev/null)" || mem_avail="?"
+        printf "  %-16s MemTotal: %s kB, MemAvailable: %s kB  [OK]\n" "/proc/meminfo" "$mem_total" "$mem_avail"
+    else
+        printf "  %-16s %s\n" "/proc/meminfo" "${_C_RED}[MISSING]${_C_RESET}"
+        missing=1
+    fi
+
+    # EDAC
+    local edac_base="${EDAC_BASE:-/sys/devices/system/edac}"
+    if [[ -d "${edac_base}/mc" ]]; then
+        local mc_count
+        mc_count="$(find "${edac_base}/mc" -maxdepth 1 -type d -name 'mc*' 2>/dev/null | wc -l)"
+        printf "  %-16s %s/mc/ (%s memory controllers)  [OK]\n" "EDAC" "$edac_base" "$mc_count"
+    else
+        printf "  %-16s %s\n" "EDAC" "[NOT FOUND] (no ECC or EDAC driver not loaded)"
+    fi
+
+    # NUMA
+    local sys_node_base="${SYS_NODE_BASE:-/sys/devices/system/node}"
+    if [[ -d "$sys_node_base" ]]; then
+        local node_count
+        node_count="$(find "$sys_node_base" -maxdepth 1 -type d -name 'node*' 2>/dev/null | wc -l)"
+        printf "  %-16s %s nodes  [OK]\n" "NUMA" "$node_count"
+    else
+        printf "  %-16s %s\n" "NUMA" "[NOT FOUND]"
+    fi
+
+    # Physical cores
+    local core_count
+    if core_count="$(get_core_count 2>/dev/null)"; then
+        printf "  %-16s %s cores  [OK]\n" "Physical cores" "$core_count"
+    else
+        printf "  %-16s %s\n" "Physical cores" "${_C_YELLOW}[UNKNOWN]${_C_RESET} (lscpu and nproc both failed)"
+    fi
+
+    # Memory lock
+    local memlock_raw
+    memlock_raw="$(_read_ulimit_l 2>/dev/null)" || memlock_raw="(unknown)"
+    printf "  %-16s ulimit -l: %s  [OK]\n" "Memory lock" "$memlock_raw"
+
+    echo ""
+
+    # --- Summary ---
+    if [[ "$missing" -eq 0 ]]; then
+        echo "${_C_GREEN}All required dependencies found.${_C_RESET}"
+        return 0
+    else
+        echo "${_C_RED}Some required dependencies are missing.${_C_RESET}"
+        return 1
+    fi
 }

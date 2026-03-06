@@ -1,0 +1,220 @@
+.\" pmemtester - Parallel wrapper for memtester
+.\" SPDX-License-Identifier: GPL-2.0-only
+.TH PMEMTESTER 1 "2026-03-06" "pmemtester 0.7" "User Commands"
+.SH NAME
+pmemtester \- parallel memory testing with EDAC hardware error detection
+.SH SYNOPSIS
+.B pmemtester
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B pmemtester
+is a parallel wrapper for
+.BR memtester (8)
+that runs multiple memtester instances simultaneously (one per physical CPU
+core), divides RAM equally among them, and validates results using both
+memtester exit codes and Linux EDAC (Error Detection and Correction) hardware
+error counters.
+.PP
+Testing proceeds in two phases:
+.TP
+.B Phase 1 (memtester)
+Deterministic memory test patterns run in parallel across all cores.
+.TP
+.B Phase 2 (stressapptest)
+Optional randomised bus-contention stress test using Google's stressapptest.
+Runs only if the binary is found (or forced with \fB\-\-stressapptest on\fR).
+.PP
+EDAC counters are compared before, between, and after test phases to detect
+hardware-reported ECC errors that may not manifest as memtester failures.
+.SH OPTIONS
+.TP
+.BI \-\-percent " N"
+Percentage of RAM to test (0.001\-100, default: 90). Supports up to 3
+decimal places (e.g., 0.1 for a quick smoke test).
+.TP
+.BI \-\-size " SIZE"
+Total RAM to test with a unit suffix: K (KiB), M (MiB), G (GiB), T (TiB).
+For example, \fB\-\-size 256M\fR tests 256 MiB. Mutually exclusive with
+\fB\-\-percent\fR.
+.TP
+.BI \-\-ram\-type " TYPE"
+RAM measurement basis: \fBavailable\fR (default), \fBtotal\fR, or \fBfree\fR.
+.TP
+.BI \-\-memtester\-dir " DIR"
+Directory containing the memtester binary (default: /usr/local/bin).
+.TP
+.BI \-\-log\-dir " DIR"
+Directory for log files (default: /tmp/pmemtester.PID).
+.TP
+.BI \-\-iterations " N"
+Number of memtester iterations per thread (default: 1).
+.TP
+.B \-\-allow\-ce
+Allow correctable EDAC errors (CE); only fail on uncorrectable errors (UE).
+Without this flag, any EDAC error (CE or UE) causes a FAIL verdict.
+.TP
+.BI \-\-color " MODE"
+Coloured terminal output: \fBauto\fR (default), \fBon\fR, or \fBoff\fR.
+Auto mode detects terminal capability and honours the \fBNO_COLOR\fR
+environment variable.
+.TP
+.BI \-\-stressapptest " MODE"
+Control the stressapptest pass: \fBauto\fR (default, runs if binary found and
+Phase 1 passed), \fBon\fR (mandatory, fails if binary absent), or \fBoff\fR
+(disabled).
+.TP
+.BI \-\-stressapptest\-seconds " N"
+Stressapptest duration in seconds. 0 (default) matches the Phase 1
+wall-clock time.
+.TP
+.BI \-\-stressapptest\-dir " DIR"
+Directory containing the stressapptest binary (default: /usr/local/bin).
+.TP
+.BI \-\-estimate " MODE"
+Time estimation calibration: \fBauto\fR (default, silently skips on failure),
+\fBon\fR (warns on failure), or \fBoff\fR (skips entirely).
+.TP
+.B \-\-stop\-on\-error
+Stop immediately when any error is detected (memtester exit or EDAC
+uncorrectable error). Remaining memtester instances are killed, and Phase 2
+is skipped.
+.TP
+.BI \-\-threads " N"
+Number of memtester instances to run (default: auto-detect physical cores
+via lscpu). Warns if N exceeds the logical CPU count.
+.TP
+.BI \-\-numa\-node " N"
+Constrain testing to NUMA node N. Each memtester instance and stressapptest
+are wrapped with \fBnumactl \-\-cpunodebind=N \-\-membind=N\fR. The core
+count is automatically set to the number of physical cores on that node.
+Requires \fBnumactl\fR to be installed. CPU-less NUMA nodes (e.g., HBM)
+produce an error with a workaround suggestion.
+.TP
+.B \-\-pin
+Pin each memtester instance to a specific physical CPU core using
+\fBtaskset\fR. Uses \fBlscpu \-b \-p=Socket,Core,CPU,Node\fR to map
+physical cores to logical CPU IDs (lowest ID per core). Stressapptest
+is also pinned. Eliminates scheduler migration for reproducible results.
+.TP
+.B \-\-check\-deps
+Check all required and optional dependencies, display versions, paths,
+and system capabilities, then exit. Returns 0 if all required dependencies
+are found, 1 otherwise.
+.TP
+.B \-\-version
+Show version and exit.
+.TP
+.B \-\-help
+Show usage summary and exit.
+.SH EXIT STATUS
+.TP
+.B 0
+All tests passed and no EDAC errors detected (or CE only with \fB\-\-allow\-ce\fR).
+.TP
+.B 1
+One or more tests failed, or EDAC errors were detected, or a required
+dependency is missing (with \fB\-\-check\-deps\fR).
+.SH EXAMPLES
+Test 90% of available RAM (default):
+.PP
+.nf
+.RS
+sudo pmemtester
+.RE
+.fi
+.PP
+Test 80% of total RAM with 3 iterations:
+.PP
+.nf
+.RS
+sudo pmemtester \-\-percent 80 \-\-ram\-type total \-\-iterations 3
+.RE
+.fi
+.PP
+Test exactly 256 MiB:
+.PP
+.nf
+.RS
+sudo pmemtester \-\-size 256M
+.RE
+.fi
+.PP
+Test NUMA node 0 with CPU pinning:
+.PP
+.nf
+.RS
+sudo pmemtester \-\-numa\-node 0 \-\-pin \-\-percent 90
+.RE
+.fi
+.PP
+Quick smoke test (0.1% of RAM):
+.PP
+.nf
+.RS
+sudo pmemtester \-\-percent 0.1
+.RE
+.fi
+.PP
+Check dependencies before running:
+.PP
+.nf
+.RS
+sudo pmemtester \-\-check\-deps
+.RE
+.fi
+.SH DEPENDENCIES
+.SS Required
+.TP
+.B memtester
+Memory testing tool (not bundled). See \fIhttps://pyropus.ca./software/memtester/\fR.
+.TP
+.B lscpu
+CPU topology detection (from util-linux).
+.TP
+.B awk\fR, \fBfind\fR, \fBdiff
+Standard Unix utilities used for text processing and EDAC comparison.
+.SS Optional
+.TP
+.B stressapptest
+Randomised stress testing tool by Google. Auto mode silently skips if
+absent. See \fIhttps://github.com/stressapptest/stressapptest\fR.
+.TP
+.B numactl
+Required only for \fB\-\-numa\-node\fR.
+.TP
+.B taskset
+Required only for \fB\-\-pin\fR (from util-linux).
+.TP
+.B dmesg
+Used for EDAC message capture.
+.TP
+.B nproc
+Fallback for core count detection if lscpu fails.
+.SH FILES
+.TP
+.I /proc/meminfo
+System memory information.
+.TP
+.I /sys/devices/system/edac/mc/
+EDAC memory controller sysfs directory. Absent on systems without ECC RAM
+or without an EDAC driver loaded.
+.TP
+.I /sys/devices/system/node/
+NUMA node sysfs directory.
+.TP
+.I /tmp/pmemtester.PID/
+Default log directory (override with \fB\-\-log\-dir\fR). Contains per-thread
+logs (\fIthread_N.log\fR), a master log (\fImaster.log\fR), and EDAC
+snapshots.
+.SH SEE ALSO
+.BR memtester (8),
+.BR stressapptest (1),
+.BR numactl (8),
+.BR taskset (1),
+.BR lscpu (1),
+.BR edac\-util (8)
+.SH AUTHORS
+Johnathon Weare <jrweare@gmail.com>
+.PP
+.UR https://github.com/widefox/pmemtester
+.UE
