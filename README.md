@@ -673,13 +673,19 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-622 tests (475 unit + 114 integration + 33 smoke).
+721 tests (475 unit + 114 integration + 33 smoke + 19 regression + 21 property + 23 acceptance + 27 security + 9 performance).
 
 ```bash
 make test              # Run all tests (unit + integration)
 make test-unit         # Unit tests only
 make test-integration  # Integration tests only
 make test-smoke        # Smoke tests (real binaries, needs memtester installed)
+make test-regression   # Regression tests (issue-traced defect guards)
+make test-property     # Property-based tests (mathematical invariants)
+make test-acceptance   # Acceptance tests (user-facing requirements)
+make test-security     # Security tests (injection, sanitization, overflow)
+make test-performance  # Performance tests (overhead, scaling benchmarks)
+make test-all          # All of the above (except smoke)
 make coverage          # Generate kcov coverage report
 make lint              # Run shellcheck
 ```

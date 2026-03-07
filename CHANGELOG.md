@@ -30,9 +30,17 @@
 - `format_edac_dimm_topology()` in `edac.sh`: List EDAC MC/csrow/channel topology with DIMM labels
 - `correlate_physical_to_edac()` in `edac.sh`: Correlate physical address range with EDAC errors
 
+### New test suites
+
+- `test/regression/regression.bats`: 19 regression tests traced to GitHub issues and internally-discovered defects. Includes regression for issue #1 (misleading memlock ERROR vs INFO).
+- `test/property/property.bats`: 21 property-based tests verifying mathematical invariants (commutativity, monotonicity, identity, bounds) across all math/unit functions.
+- `test/acceptance/acceptance.bats`: 23 acceptance tests validating user-facing requirements (parallel execution, RAM division, log files, PASS/FAIL verdict, EDAC handling, CLI flags).
+- `test/security/security.bats`: 27 security tests covering command injection resistance, input sanitization, integer overflow, path traversal, and environment variable isolation.
+- `test/performance/performance.bats`: 9 performance/benchmark tests measuring wrapper overhead, thread scaling, argument parsing throughput, and log file size bounds.
+
 ### Tests
 
-622 tests (475 unit + 114 integration + 33 smoke), up from 536 in v0.7.
+721 tests (475 unit + 114 integration + 33 smoke + 19 regression + 21 property + 23 acceptance + 27 security + 9 performance), up from 622.
 
 ## v0.7 (2026-03-06)
 
