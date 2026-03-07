@@ -673,7 +673,7 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-589 tests (475 unit + 114 integration + 7 smoke).
+622 tests (475 unit + 114 integration + 33 smoke).
 
 ```bash
 make test              # Run all tests (unit + integration)

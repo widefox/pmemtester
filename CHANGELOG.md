@@ -32,7 +32,7 @@
 
 ### Tests
 
-589 tests (475 unit + 114 integration + 7 smoke), up from 536 in v0.7.
+622 tests (475 unit + 114 integration + 33 smoke), up from 536 in v0.7.
 
 ## v0.7 (2026-03-06)
 
