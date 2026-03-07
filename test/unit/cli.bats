@@ -45,10 +45,10 @@ setup() {
 }
 
 @test "parse_args --version" {
-    pmemtester_version="0.7"
+    pmemtester_version="0.8"
     run parse_args --version
     assert_success
-    assert_output --partial "pmemtester 0.7"
+    assert_output --partial "pmemtester 0.8"
 }
 
 @test "parse_args --help" {
@@ -838,7 +838,7 @@ setup() {
     load_lib system_detect.sh
     load_lib edac.sh
     load_lib memlock.sh
-    pmemtester_version="0.7"
+    pmemtester_version="0.8"
     COLOR_MODE=off
     color_init
     local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
@@ -854,7 +854,7 @@ setup() {
     SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
     PATH="${mock_bin}:${PATH}" \
     run check_deps
-    assert_output --partial "pmemtester 0.7 dependency check"
+    assert_output --partial "pmemtester 0.8 dependency check"
 }
 
 @test "check_deps shows Required section" {
