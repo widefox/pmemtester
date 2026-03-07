@@ -163,7 +163,7 @@ sudo pmemtester --percent 1 --stressapptest off
 
 ```console
 $ pmemtester --help
-Usage: pmemtester 0.6 [OPTIONS]
+Usage: pmemtester 0.7 [OPTIONS]
 
 Options:
   --percent N              Percentage of RAM to test (0.001-100, default: 90)
@@ -703,7 +703,7 @@ See [TODO.md](TODO.md) for planned improvements including EDAC region correlatio
 
 | Tool | Environment | Parallel | ECC CE Detection | Active | License |
 |------|-------------|----------|-----------------|--------|---------|
-| **pmemtester** | Userspace | Yes | **Yes** (EDAC before/between/after) | Yes (v0.6, 2026) | GPL-2.0 |
+| **pmemtester** | Userspace | Yes | **Yes** (EDAC before/between/after) | Yes (v0.7, 2026) | GPL-2.0 |
 | memtester | Userspace | No | No | Yes (v4.7.1, 2024) | GPL-2.0 |
 | stressapptest | Userspace | Yes | No | Low (v1.0.11, 2023) | Apache-2.0 |
 | stress-ng | Userspace | Yes | No | Yes (monthly releases) | GPL-2.0 |

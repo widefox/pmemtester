@@ -1,5 +1,5 @@
 NAME    := pmemtester
-VERSION := 0.6
+VERSION := 0.7
 PREFIX  := /usr/local
 
 .PHONY: test test-unit test-integration test-smoke coverage lint clean dist install uninstall
