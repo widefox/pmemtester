@@ -673,26 +673,51 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-721 tests (475 unit + 114 integration + 33 smoke + 19 regression + 21 property + 23 acceptance + 27 security + 9 performance).
+721 tests across 8 test suites.
+
+### Test suites
+
+| Suite | Tests | Command | What it verifies |
+|-------|------:|---------|------------------|
+| 🟢 Unit | 475 | `make test-unit` | Individual functions in isolation (every lib/*.sh function) |
+| 🟢 Integration | 114 | `make test-integration` | Full pmemtester runs with mocked externals (end-to-end orchestration) |
+| 🟢 Regression | 19 | `make test-regression` | Guards against known defects ([#1](https://github.com/widefox/pmemtester/issues/1), octal pitfalls, overflow) |
+| 🟢 Property | 21 | `make test-property` | Mathematical invariants (commutativity, monotonicity, identity, bounds) |
+| 🟢 Acceptance | 23 | `make test-acceptance` | User-facing requirements (parallel execution, RAM division, PASS/FAIL verdict, CLI flags) |
+| 🟢 Security | 27 | `make test-security` | Command injection resistance, input sanitization, integer overflow, path traversal |
+| 🟢 Performance | 9 | `make test-performance` | Wrapper overhead, thread scaling, argument parsing throughput, log file size bounds |
+| 🟡 Smoke | 33 | `make test-smoke` | Real memtester/stressapptest binaries with `--percent 1` (skips if binaries absent) |
+
+🟢 = mocked (fast, runs anywhere) · 🟡 = requires real binaries (optional)
+
+### Running tests
 
 ```bash
-make test              # Run all tests (unit + integration)
-make test-unit         # Unit tests only
-make test-integration  # Integration tests only
-make test-smoke        # Smoke tests (real binaries, needs memtester installed)
-make test-regression   # Regression tests (issue-traced defect guards)
-make test-property     # Property-based tests (mathematical invariants)
-make test-acceptance   # Acceptance tests (user-facing requirements)
-make test-security     # Security tests (injection, sanitization, overflow)
-make test-performance  # Performance tests (overhead, scaling benchmarks)
-make test-all          # All of the above (except smoke)
-make coverage          # Generate kcov coverage report
-make lint              # Run shellcheck
+make test              # Unit + integration (default, fast)
+make test-all          # All mocked suites (unit, integration, regression, property, acceptance, security, performance)
+make test-smoke        # Real binaries only (separate from mocked suite)
+make lint              # shellcheck on all source files
+make coverage          # kcov coverage report (opens ./coverage/index.html)
 ```
 
-Smoke tests (`make test-smoke`) run pmemtester against real memtester/stressapptest binaries with `--percent 1` for minimal memory pressure. They skip gracefully when binaries are absent. These are kept separate from the fast mocked test suite.
+Individual suites can also be run directly: `bats test/unit/math_utils.bats` or filtered by name: `bats test/unit/math_utils.bats -f "ceiling_div"`.
 
-Test infrastructure: [bats-core](https://github.com/bats-core/bats-core) 1.13.0 with bats-support/bats-assert. Coverage via [kcov](https://simonkagstrom.github.io/kcov/) v38+ (older versions cannot instrument bash `source`d files inside bats subshells; if your distro ships an older version such as Fedora's v35, build from [source](https://github.com/SimonKagstrom/kcov)).
+### Test design philosophy
+
+Each suite serves a distinct purpose in the test pyramid:
+
+- **Unit** tests verify each function's contract in isolation. Every `lib/*.sh` function has dedicated tests with mocked dependencies.
+- **Integration** tests exercise the full `pmemtester` pipeline with mocked externals — they prove the orchestration logic (spawn, wait, log, EDAC, verdict) works end-to-end.
+- **Regression** tests are traced to specific bug reports or internally-discovered defects. Each test name includes the issue number or defect description, serving as living documentation of past failures.
+- **Property** tests verify mathematical invariants that must hold for all inputs — commutativity of `min`/`max`, monotonicity of `percentage_of`, identity properties, bounds correctness. These catch classes of bugs rather than specific cases.
+- **Acceptance** tests validate user-facing requirements: "parallel execution uses N cores", "EDAC UE causes FAIL even with `--allow-ce`", "exit code is non-zero on failure". They use dynamic EDAC fixtures where the memtester mock mutates sysfs counters mid-test.
+- **Security** tests verify that untrusted input cannot lead to code execution — shell metacharacters in `--memtester-dir`, `--log-dir`, `--percent`, `--size`, `--numa-node`, and mode arguments are stored as literal strings or rejected.
+- **Performance** tests flag gross regressions in wrapper overhead. Thresholds are deliberately generous (seconds, not milliseconds) to avoid false failures on slow CI runners.
+- **Smoke** tests run against real binaries with minimal memory (`--percent 1`). They are separated from the mocked suite because they require `memtester` installed and take longer to run.
+
+### Test infrastructure
+
+[bats-core](https://github.com/bats-core/bats-core) 1.13.0 with bats-support/bats-assert. Coverage via [kcov](https://simonkagstrom.github.io/kcov/) v38+ (older versions cannot instrument bash `source`d files inside bats subshells; if your distro ships an older version such as Fedora's v35, build from [source](https://github.com/SimonKagstrom/kcov)).
 
 ## EDAC Compatibility
 
