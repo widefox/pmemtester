@@ -733,7 +733,7 @@ Nearly all major distros enable `CONFIG_EDAC=y` with hardware drivers as modules
 
 ## Roadmap
 
-See [TODO.md](TODO.md) for planned improvements including EDAC region correlation, multi-architecture validation, NUMA locality, heterogeneous core handling, and thread pinning.
+See [TODO.md](TODO.md) for planned improvements including EDAC region correlation, multi-architecture validation, heterogeneous core handling, and C rewrite.
 
 ## Linux Memory Testing Tools Comparison
 

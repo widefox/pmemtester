@@ -30,21 +30,7 @@ Considerations:
 - `ulimit -l` memory locking behavior may differ across platforms
 - EDAC_GHES (firmware-first) may be the only EDAC path on some ARM64 servers
 
-## 3. NUMA Locality (complete)
-
-Implemented in v0.7:
-
-- [x] `--numa-node N` flag constrains testing to a specific NUMA node via `numactl --cpunodebind=N --membind=N`
-- [x] Auto-detects node core count and adjusts thread count accordingly
-- [x] CPU-less NUMA nodes (e.g., HBM) error with a message suggesting manual `numactl --membind=N` workaround
-- [x] Integrates with `--threads` (warns if T > node cores) and `--pin` (filters CPUs to node)
-- [x] Wraps both memtester instances and stressapptest
-- [x] Multi-node support: `--numa-node 0,1,2` tests multiple nodes in parallel
-- [x] Per-node results printed individually, followed by overall verdict
-- [x] CPU-less nodes automatically borrow CPUs from a donor node
-- [x] EDAC captured as single snapshot with warning that attribution to individual nodes is not possible
-
-## 4. Heterogeneous Cores
+## 3. Heterogeneous Cores
 
 pmemtester currently treats all CPU threads homogeneously:
 
@@ -53,18 +39,7 @@ pmemtester currently treats all CPU threads homogeneously:
 - Document this assumption and any edge cases (e.g., E-cores with smaller cache may exhibit different memory access patterns)
 - Consider whether thread pinning (`taskset`) to specific core types would improve test coverage or reproducibility
 
-## 5. Thread Pinning (complete)
-
-Implemented in v0.7:
-
-- [x] `--pin` flag pins each memtester to a specific physical CPU core via `taskset -c <cpu_id>`
-- [x] Uses `lscpu -b -p=Socket,Core,CPU,Node` to map physical cores to lowest logical CPU ID
-- [x] Eliminates scheduler migration -- each memtester stays on its assigned core
-- [x] Makes results reproducible across runs (same core-to-memory mapping)
-- [x] Combines with `--numa-node N` to filter CPUs to a specific node
-- [x] Stressapptest also wrapped with `taskset -c <csv>` for full pinning
-
-## 7. Sequential Rolling RAM Test
+## 4. Sequential Rolling RAM Test
 
 **Out of scope.** Physical memory addressing requires kernel-level cooperation (`move_pages()`, custom module walking `page_struct`). Userspace `mmap`/`malloc` + `mlock` provides no control over which physical frames are allocated, so freeing and reallocating cannot guarantee coverage of different physical memory.
 
@@ -78,20 +53,7 @@ memtester's `-p` flag (physical address mode via `/dev/mem`) was evaluated as an
 
 For exhaustive physical RAM testing, use a standalone boot-time tester (MemTest86, MemTest86+) where the tool has exclusive access to the full physical address space before the OS loads.
 
-## 8. Virtual-to-Physical Address Translation for DIMM-Level Failure Correlation (complete)
-
-Implemented in v0.8 (pending release):
-
-- [x] `--show-physical` flag captures `/proc/PID/pagemap` snapshots during Phase 1 for each memtester thread
-- [x] Translates virtual pages to physical page frame numbers (PFN) via sampled pagemap reading
-- [x] Reports physical address range per thread in the test output
-- [x] Correlates EDAC error addresses from dmesg with thread physical address ranges
-- [x] `format_edac_dimm_topology()` lists MC/csrow/channel structure with DIMM labels
-- [x] Permission-gated: gracefully warns and continues when pagemap is not readable (requires root or CAP_SYS_ADMIN)
-- [x] `check_deps` shows pagemap readability and `od` availability
-- [x] New `lib/pagemap.sh` with 10 functions; 3 new functions added to `lib/edac.sh`
-
-## 9. Single Binary: Port to C and Integrate with memtester
+## 5. Single Binary: Port to C and Integrate with memtester
 
 Rewrite pmemtester as a C program that integrates memtester's testing logic directly, producing a single `pmemtester` executable with no external dependency on the `memtester` binary.
 
