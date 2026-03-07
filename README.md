@@ -406,28 +406,35 @@ stressapptest output is captured in `stressapptest.log` in the log directory. St
 └── stressapptest                       # External: optional (not bundled)
 
 pmemtester                              # Main executable (thin orchestrator)
+pmemtester.1                            # Manpage (installed by make install)
 Makefile                                # Build, test, install, dist targets
 PROMPT.md                               # Original design specification
 CLAUDE.md                               # Developer guide for Claude Code
+FAQ.md                                  # Frequently asked questions
+CHANGELOG.md                            # Version history
+TODO.md                                 # Planned improvements
+docs/plans/                             # Design documents
 lib/
-├── cli.sh                              # Argument parsing and validation
+├── cli.sh                              # Argument parsing, validation, --check-deps
 ├── color.sh                            # Coloured terminal output (PASS/FAIL/WARN)
 ├── edac.sh                             # EDAC message/counter monitoring
+├── estimate.sh                         # Time estimation (calibration, duration scaling, ETA)
 ├── logging.sh                          # Per-thread and master logging
 ├── math_utils.sh                       # Integer arithmetic utilities
 ├── memlock.sh                          # Kernel memory lock management
 ├── memtester_mgmt.sh                   # Find and validate memtester binary
-├── parallel.sh                         # Parallel memtester execution
+├── parallel.sh                         # Parallel memtester execution, CPU pinning
 ├── ram_calc.sh                         # RAM allocation calculations
 ├── stressapptest_mgmt.sh               # Find, validate, and run stressapptest
-├── system_detect.sh                    # RAM and core count detection
+├── system_detect.sh                    # RAM, core count, NUMA topology, physical CPU mapping
 ├── timing.sh                           # Timing, status output, phase formatting
-└── unit_convert.sh                     # kB/MB/bytes conversions
+└── unit_convert.sh                     # kB/MB/bytes conversions, parse_size_to_kb (K/M/G/T)
 test/
 ├── unit/                                # Unit tests (one .bats per lib)
 │   ├── cli.bats
 │   ├── color.bats
 │   ├── edac.bats
+│   ├── estimate.bats
 │   ├── logging.bats
 │   ├── math_utils.bats
 │   ├── memlock.bats
@@ -443,7 +450,7 @@ test/
 │   └── install.bats                     # Install target tests (MEMTESTER_DIR/STRESSAPPTEST_DIR patching)
 ├── smoke/
 │   └── smoke_test.bats                  # Real-system smoke tests (requires real binaries)
-├── fixtures/                            # Synthetic /proc/meminfo, EDAC sysfs, NUMA sysfs
+├── fixtures/                            # Synthetic /proc/meminfo, EDAC sysfs, CPU cache sysfs, NUMA sysfs
 │   ├── proc_meminfo_normal
 │   ├── proc_meminfo_low
 │   ├── proc_meminfo_no_available
@@ -454,6 +461,10 @@ test/
 │   ├── edac_counters_ce_and_ue/
 │   ├── edac_messages_clean.txt
 │   ├── edac_messages_errors.txt
+│   ├── sys_cpu_cache_3mb/               # 3 MB L3 cache fixture
+│   ├── sys_cpu_cache_96mb/              # 96 MB L3 cache fixture
+│   ├── sys_cpu_cache_no_l3/             # No L3 cache fixture
+│   ├── sys_cpu_cache_l3_at_index2/      # L3 at non-standard index
 │   ├── sys_node_single/                 # Single NUMA node fixture
 │   └── sys_node_2node/                  # Dual NUMA node fixture
 └── test_helper/
