@@ -16,6 +16,160 @@ for lib in "${SCRIPT_DIR}"/lib/*.sh; do
     source "$lib"
 done
 
+# run_single_node_test: run the full test pipeline for a single NUMA node
+# Writes exit code to <node_log_dir>/result file
+# Usage: run_single_node_test <node> <memtester_path> <stressapptest_path> <run_stressapptest_pass> <ram_kb> <node_log_dir>
+# Reads globals: ITERATIONS, THREADS, PIN, STOP_ON_ERROR, STRESSAPPTEST_MODE, STRESSAPPTEST_SECONDS,
+#                ESTIMATE_MODE, ALLOW_CE
+run_single_node_test() {
+    local node="$1" memtester_path="$2" stressapptest_path="$3" run_stressapptest_pass="$4"
+    local ram_kb="$5" node_log_dir="$6"
+
+    # Resolve CPUs for this node (own or borrowed from donor)
+    local node_info core_count cpu_source_node
+    node_info="$(resolve_node_cpus "$node")"
+    local prefix="${node_info%% *}"
+    local rest="${node_info#* }"
+    core_count="${rest%% *}"
+    local cpu_list_str="${rest#* }"
+    cpu_source_node="${prefix#*:}"
+
+    if [[ "$prefix" == donor:* ]]; then
+        echo "Node ${node}: CPU-less node, borrowing CPUs from node ${cpu_source_node}"
+    fi
+
+    # Thread override per node
+    if [[ "$THREADS" -gt 0 ]]; then
+        core_count="$THREADS"
+    fi
+
+    # CPU pinning
+    local node_cpu_list=()
+    if [[ "$PIN" -eq 1 ]]; then
+        read -ra node_cpu_list <<< "$cpu_list_str"
+        if [[ "$THREADS" -eq 0 ]]; then
+            core_count="${#node_cpu_list[@]}"
+        fi
+    fi
+
+    local ram_per_core_mb
+    ram_per_core_mb="$(divide_ram_per_core_mb "$ram_kb" "$core_count")"
+
+    local size_arg
+    size_arg="$(mb_to_memtester_arg "$ram_per_core_mb")"
+
+    init_logs "$node_log_dir" "$core_count"
+
+    echo "Node ${node}: ${ram_per_core_mb}MB x ${core_count} cores"
+
+    # Determine the numactl node: membind to target, cpunodebind to cpu_source_node
+    local effective_numa="$node"
+
+    # Phase 1: memtester (use per-node NUMA_NODE and CPU_LIST)
+    NUMA_NODE="$effective_numa" CPU_LIST=("${node_cpu_list[@]}")
+    run_all_memtesters "$memtester_path" "$size_arg" "$ITERATIONS" "$core_count" "$node_log_dir"
+    local memtester_result=0
+    wait_and_collect "$node_log_dir" "$STOP_ON_ERROR" || memtester_result=1
+
+    aggregate_logs "$node_log_dir" "$core_count"
+
+    # Phase 2: stressapptest (per-node)
+    local stressapptest_result=0
+    if [[ "$run_stressapptest_pass" -eq 1 ]] && [[ "$memtester_result" -eq 0 ]]; then
+        local total_mb=$(( ram_per_core_mb * core_count ))
+        local sat_seconds="$STRESSAPPTEST_SECONDS"
+        if [[ "$sat_seconds" -eq 0 ]]; then
+            sat_seconds=1
+        fi
+        local sat_cpu_csv=""
+        if [[ "${#node_cpu_list[@]}" -gt 0 ]]; then
+            sat_cpu_csv="$(IFS=,; echo "${node_cpu_list[*]}")"
+        fi
+        run_stressapptest "$stressapptest_path" "$sat_seconds" "$total_mb" "$node_log_dir" \
+            "$sat_cpu_csv" "$effective_numa" || stressapptest_result=1
+    fi
+
+    # Write result
+    local result=0
+    if [[ "$memtester_result" -ne 0 ]] || [[ "$stressapptest_result" -ne 0 ]]; then
+        result=1
+    fi
+    echo "$result" > "${node_log_dir}/result"
+    return "$result"
+}
+
+# run_multi_node: orchestrate parallel per-node test runs
+# Usage: run_multi_node <memtester_path> <stressapptest_path> <run_stressapptest_pass> <ram_kb> <log_dir>
+run_multi_node() {
+    local memtester_path="$1" stressapptest_path="$2" run_stressapptest_pass="$3"
+    local ram_kb="$4" log_dir="$5"
+
+    local nodes_str
+    nodes_str="$(parse_numa_nodes "$NUMA_NODE")"
+    local nodes=()
+    read -ra nodes <<< "$nodes_str"
+    local num_nodes="${#nodes[@]}"
+
+    # Divide RAM equally among nodes
+    local ram_per_node_kb=$(( ram_kb / num_nodes ))
+
+    print_status "Multi-node NUMA: testing ${num_nodes} nodes (${nodes[*]})" "$log_dir"
+
+    # EDAC warning for multi-node
+    local edac_supported=0
+    if check_edac_supported 2>/dev/null; then
+        edac_supported=1
+        print_status "WARNING: EDAC errors cannot be attributed to individual NUMA nodes" "$log_dir"
+        capture_edac_messages > "${log_dir}/edac_messages_before.txt"
+        capture_edac_counters > "${log_dir}/edac_counters_before.txt"
+    fi
+
+    # Launch per-node tests in parallel
+    local node_pids=()
+    local node
+    for node in "${nodes[@]}"; do
+        local node_log_dir="${log_dir}/node_${node}"
+        mkdir -p "$node_log_dir"
+        run_single_node_test "$node" "$memtester_path" "$stressapptest_path" \
+            "$run_stressapptest_pass" "$ram_per_node_kb" "$node_log_dir" &
+        node_pids+=($!)
+    done
+
+    # Wait for all nodes and collect results
+    local overall_result=0
+    local i=0
+    for node in "${nodes[@]}"; do
+        local node_log_dir="${log_dir}/node_${node}"
+        if wait "${node_pids[$i]}" 2>/dev/null; then
+            print_status "Node ${node}: PASS" "$log_dir"
+        else
+            print_status "Node ${node}: FAIL" "$log_dir"
+            overall_result=1
+        fi
+        i=$(( i + 1 ))
+    done
+
+    # EDAC after (single snapshot spanning all nodes)
+    if [[ "$edac_supported" -eq 1 ]]; then
+        capture_edac_messages > "${log_dir}/edac_messages_after.txt"
+        capture_edac_counters > "${log_dir}/edac_counters_after.txt"
+        local edac_class
+        edac_class="$(classify_edac_counters "${log_dir}/edac_counters_before.txt" "${log_dir}/edac_counters_after.txt" 2>/dev/null)" || true
+        if [[ "$edac_class" != "none" ]]; then
+            print_status "EDAC: ${edac_class} (cannot attribute to specific node)" "$log_dir"
+            overall_result=1
+        fi
+    fi
+
+    # Overall verdict
+    if [[ "$overall_result" -eq 0 ]]; then
+        color_pass
+    else
+        color_fail "multi-node"
+    fi
+    return "$overall_result"
+}
+
 main() {
     parse_args "$@"
     color_init
@@ -51,7 +205,7 @@ main() {
             ;;
     esac
 
-    local ram_kb core_count ram_per_core_mb
+    local ram_kb
     if [[ -n "${SIZE:-}" ]]; then
         ram_kb="$(parse_size_to_kb "$SIZE")"
     else
@@ -59,6 +213,18 @@ main() {
         millipercent="$(decimal_to_millipercent "$PERCENT")"
         ram_kb="$(calculate_test_ram_kb_milli "$millipercent" "$RAM_TYPE")"
     fi
+
+    # Multi-node NUMA: dispatch to run_multi_node
+    if [[ -n "${NUMA_NODE:-}" ]] && [[ "$NUMA_NODE" == *,* ]]; then
+        local log_dir="${LOG_DIR:-/tmp/pmemtester.$$}"
+        init_logs "$log_dir" 0
+        check_memlock_sufficient "$ram_kb" || configure_memlock "$ram_kb"
+        run_multi_node "$memtester_path" "$stressapptest_path" "$run_stressapptest_pass" \
+            "$ram_kb" "$log_dir"
+        return $?
+    fi
+
+    local core_count ram_per_core_mb
     core_count="$(get_core_count)"
 
     # NUMA node handling: override core count with node's physical cores

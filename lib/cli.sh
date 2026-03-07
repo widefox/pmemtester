@@ -60,7 +60,7 @@ Options:
   --estimate MODE     Time estimate calibration: auto (default), on, off
   --stop-on-error     Stop immediately when any error is detected (default: wait for all threads)
   --threads N         Number of memtester instances to run (default: auto-detect physical cores)
-  --numa-node N       Constrain testing to NUMA node N (requires numactl)
+  --numa-node N       Constrain testing to NUMA node N or comma-separated nodes (requires numactl)
   --pin               Pin each memtester to a specific physical CPU core (uses taskset)
   --check-deps        Check all dependencies, show versions and paths, then exit
   --version           Show version
@@ -176,15 +176,20 @@ validate_args() {
         fi
     fi
     if [[ -n "${NUMA_NODE:-}" ]]; then
-        if ! [[ "$NUMA_NODE" =~ ^[0-9]+$ ]]; then
-            echo "ERROR: --numa-node must be a non-negative integer (got ${NUMA_NODE})" >&2
-            return 1
-        fi
+        # Validate each node in comma-separated list
         local sys_node_base="${SYS_NODE_BASE:-/sys/devices/system/node}"
-        if [[ ! -d "${sys_node_base}/node${NUMA_NODE}" ]]; then
-            echo "ERROR: NUMA node ${NUMA_NODE} does not exist (${sys_node_base}/node${NUMA_NODE}/ not found)" >&2
-            return 1
-        fi
+        local _node
+        for _node in $(echo "$NUMA_NODE" | tr ',' ' '); do
+            _node="$(echo "$_node" | tr -d '[:space:]')"
+            if ! [[ "$_node" =~ ^[0-9]+$ ]]; then
+                echo "ERROR: --numa-node must be non-negative integer(s) (got ${NUMA_NODE})" >&2
+                return 1
+            fi
+            if [[ ! -d "${sys_node_base}/node${_node}" ]]; then
+                echo "ERROR: NUMA node ${_node} does not exist (${sys_node_base}/node${_node}/ not found)" >&2
+                return 1
+            fi
+        done
         if ! command -v numactl > /dev/null 2>&1; then
             echo "ERROR: --numa-node requires numactl but it is not installed" >&2
             return 1

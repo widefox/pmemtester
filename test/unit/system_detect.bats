@@ -263,3 +263,110 @@ teardown() {
     assert_failure
     assert_output --partial "numactl"
 }
+
+# --- find_donor_node tests ---
+
+@test "find_donor_node returns first node with CPUs" {
+    # Mock lscpu to show node 0 has CPUs, node 1 is CPU-less
+    create_mock lscpu '
+echo "# Socket,Core,CPU,Node"
+echo "0,0,0,0"
+echo "0,1,1,0"'
+    export SYS_NODE_BASE="${FIXTURE_DIR}/sys_node_2node"
+    run find_donor_node
+    assert_success
+    assert_output "0"
+}
+
+@test "find_donor_node skips CPU-less nodes" {
+    # Create 3-node fixture: node0=CPU-less, node1=has CPUs, node2=CPU-less
+    local node_fixture="${BATS_TEST_TMPDIR}/sys_node_3"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1" "${node_fixture}/node2"
+    export SYS_NODE_BASE="$node_fixture"
+    # lscpu: only node 1 has CPUs
+    create_mock lscpu '
+echo "# Socket,Core,CPU,Node"
+echo "1,0,4,1"
+echo "1,1,5,1"'
+    run find_donor_node
+    assert_success
+    assert_output "1"
+}
+
+@test "find_donor_node fails when no node has CPUs" {
+    local node_fixture="${BATS_TEST_TMPDIR}/sys_node_empty"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1"
+    export SYS_NODE_BASE="$node_fixture"
+    # lscpu: no CPUs on any node
+    create_mock lscpu '
+echo "# Socket,Core,CPU,Node"'
+    run find_donor_node
+    assert_failure
+}
+
+@test "find_donor_node with single node returns that node" {
+    export SYS_NODE_BASE="${FIXTURE_DIR}/sys_node_single"
+    create_mock lscpu '
+echo "# Socket,Core,CPU,Node"
+echo "0,0,0,0"
+echo "0,1,1,0"'
+    run find_donor_node
+    assert_success
+    assert_output "0"
+}
+
+# --- parse_numa_nodes tests ---
+
+@test "parse_numa_nodes single node" {
+    run parse_numa_nodes "0"
+    assert_success
+    assert_output "0"
+}
+
+@test "parse_numa_nodes comma-separated" {
+    run parse_numa_nodes "0,1,2"
+    assert_success
+    # Output is space-separated
+    assert_output "0 1 2"
+}
+
+@test "parse_numa_nodes trims whitespace" {
+    run parse_numa_nodes "0, 1, 2"
+    assert_success
+    assert_output "0 1 2"
+}
+
+@test "parse_numa_nodes deduplicates" {
+    run parse_numa_nodes "0,1,0"
+    assert_success
+    assert_output "0 1"
+}
+
+@test "resolve_node_cpus returns own CPUs for node with CPUs" {
+    export SYS_NODE_BASE="${FIXTURE_DIR}/sys_node_2node"
+    create_mock lscpu '
+echo "# Socket,Core,CPU,Node"
+echo "0,0,0,0"
+echo "0,1,1,0"
+echo "1,0,2,1"
+echo "1,1,3,1"'
+    run resolve_node_cpus 0
+    assert_success
+    # Should output: cpu_node core_count cpu_list
+    assert_output --partial "0"
+}
+
+@test "resolve_node_cpus borrows from donor for CPU-less node" {
+    local node_fixture="${BATS_TEST_TMPDIR}/sys_node_borrow"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1"
+    export SYS_NODE_BASE="$node_fixture"
+    # node 0 has CPUs, node 1 is CPU-less
+    create_mock lscpu '
+echo "# Socket,Core,CPU,Node"
+echo "0,0,0,0"
+echo "0,1,1,0"'
+    run resolve_node_cpus 1
+    assert_success
+    # Should indicate borrowing from node 0
+    assert_output --partial "donor:0"
+}

@@ -173,7 +173,7 @@ Options:
   --log-dir DIR            Directory for log files (default: /tmp/pmemtester.PID)
   --iterations N           Number of memtester iterations (default: 1)
   --threads N              Number of memtester instances to run (default: auto-detect physical cores)
-  --numa-node N            Constrain testing to NUMA node N (requires numactl)
+  --numa-node N            Constrain testing to NUMA node N or comma-separated nodes (requires numactl)
   --pin                    Pin each memtester to a specific physical CPU core (uses taskset)
   --allow-ce               Allow correctable EDAC errors (CE); only fail on uncorrectable (UE)
   --stop-on-error          Stop immediately when any error is detected (default: wait for all threads)
@@ -277,15 +277,23 @@ sudo pmemtester --numa-node 1 --percent 90
 
 # Test node 0 with CPU pinning for fully reproducible results
 sudo pmemtester --numa-node 0 --pin --percent 90
+
+# Test multiple NUMA nodes in parallel
+sudo pmemtester --numa-node 0,1 --percent 90
+
+# Test all 4 NUMA nodes on a quad-socket server
+sudo pmemtester --numa-node 0,1,2,3 --percent 90
 ```
 
 The `--numa-node N` flag uses `numactl --cpunodebind=N --membind=N` to constrain both CPU threads and memory allocation to the specified NUMA node. The core count is automatically set to the number of physical cores on that node. The other socket remains fully available for workloads.
+
+**Multi-node:** Comma-separated node IDs (e.g., `--numa-node 0,1,2`) test multiple nodes in parallel. Each node runs its own memtester and stressapptest pipeline independently. RAM is divided equally among nodes. Per-node results are printed individually, followed by an overall PASS/FAIL verdict. CPU-less nodes (e.g., HBM) automatically borrow CPUs from a donor node that has CPUs.
 
 **Note:** `--percent 90` in this case applies to the available memory on the whole system (not per-node). Check per-node memory with `numactl --hardware`.
 
 **Combined with `--threads`:** If `--threads T` exceeds the node's core count, a warning is printed but execution proceeds (useful for testing memory bandwidth under oversubscription).
 
-**CPU-less NUMA nodes:** On systems with HBM or CXL-attached memory (e.g., NVIDIA Grace Blackwell), some NUMA nodes have memory but no CPUs. pmemtester will error with a suggestion to use `numactl --membind=N` manually. See [FAQ: How do I test HBM or other memory on CPU-less NUMA nodes?](FAQ.md#how-do-i-test-hbm-or-other-memory-on-cpu-less-numa-nodes)
+**CPU-less NUMA nodes:** On systems with HBM or CXL-attached memory (e.g., NVIDIA Grace Blackwell), some NUMA nodes have memory but no CPUs. For single-node mode, pmemtester will error with a suggestion to use `numactl --membind=N` manually. For multi-node mode, CPU-less nodes automatically borrow CPUs from a donor node. See [FAQ: How do I test HBM or other memory on CPU-less NUMA nodes?](FAQ.md#how-do-i-test-hbm-or-other-memory-on-cpu-less-numa-nodes)
 
 ### CPU Pinning
 
@@ -649,7 +657,7 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-521 tests (414 unit + 101 integration + 6 smoke).
+536 tests (429 unit + 107 integration + 6 smoke).
 
 ```bash
 make test              # Run all tests (unit + integration)

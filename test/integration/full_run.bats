@@ -1715,6 +1715,130 @@ MOCK
     assert_output --partial "All required dependencies found"
 }
 
+# --- multi-node NUMA integration tests ---
+
+@test "full run --numa-node 0,1 passes with both nodes" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1"
+    export SYS_NODE_BASE="$node_fixture"
+
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --numa-node 0,1 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "PASS"
+}
+
+@test "full run --numa-node 0,1 shows per-node results" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1"
+    export SYS_NODE_BASE="$node_fixture"
+
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --numa-node 0,1 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "Node 0"
+    assert_output --partial "Node 1"
+}
+
+@test "full run --numa-node 0,1 creates per-node log dirs" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1"
+    export SYS_NODE_BASE="$node_fixture"
+
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    local log_dir="${TEST_LOG_DIR}/multi_logs"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$log_dir" \
+        --numa-node 0,1 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    [[ -d "${log_dir}/node_0" ]]
+    [[ -d "${log_dir}/node_1" ]]
+}
+
+@test "full run --numa-node 0,1 with CPU-less node borrows CPUs" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1"
+    export SYS_NODE_BASE="$node_fixture"
+
+    # lscpu mock: only node 0 has CPUs
+    create_mock lscpu '
+case "$*" in
+    *Socket,Core,CPU,Node*)
+        echo "# Socket,Core,CPU,Node"
+        echo "0,0,0,0"
+        echo "0,1,1,0"
+        ;;
+    *)
+        echo "# Socket,Core"
+        echo "0,0"
+        echo "0,1"
+        ;;
+esac'
+
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --numa-node 0,1 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "borrowing CPUs from node 0"
+}
+
+@test "full run --numa-node 0,1 EDAC warning for multi-node" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1"
+    export SYS_NODE_BASE="$node_fixture"
+    export EDAC_BASE="${FIXTURE_DIR}/edac_counters_zero"
+
+    create_mock numactl 'shift; shift; exec "$@"'
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --numa-node 0,1 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "EDAC errors cannot be attributed"
+}
+
+@test "full run --numa-node 0,1 with one failing node returns 1" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1"
+    export SYS_NODE_BASE="$node_fixture"
+
+    # numactl mock: fail when membind=1 (node 1)
+    create_mock numactl '
+for arg in "$@"; do
+    if [[ "$arg" == "--membind=1" ]]; then
+        echo "FAIL on node 1" >&2
+        exit 1
+    fi
+done
+shift; shift; exec "$@"'
+
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --numa-node 0,1 \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_failure
+    assert_output --partial "FAIL"
+}
+
 @test "full run --check-deps shows Physical cores" {
     run "${PROJECT_ROOT}/pmemtester" \
         --memtester-dir "$TEST_MEMTESTER_DIR" \

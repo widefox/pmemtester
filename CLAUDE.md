@@ -64,6 +64,9 @@ make coverage
 # Constrain testing to NUMA node 0 (requires numactl)
 ./pmemtester --numa-node 0
 
+# Test multiple NUMA nodes in parallel
+./pmemtester --numa-node 0,1,2
+
 # Pin each memtester to a specific physical CPU core
 ./pmemtester --pin
 
@@ -115,7 +118,7 @@ lib/
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → (if `--size`: `parse_size_to_kb` | else: `decimal_to_millipercent` → `calculate_test_ram_kb_milli`) → `get_core_count` → (if `--numa-node N`: `get_node_core_count`, error on CPU-less nodes) → (if `--threads T`: override core_count, warn if T > node cores) → (if `--pin`: `get_physical_cpu_list` → populate `CPU_LIST`) → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection, NUMA/pin info) → (adaptive calibration: `get_l3_cache_kb` → `run_calibration` → `estimate_duration` → `print_estimate`) → (EDAC before) → Phase 1: `run_all_memtesters` (with per-thread `taskset`/`numactl` wrapping) → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest` with `taskset`/`numactl` wrapping) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → (if `--size`: `parse_size_to_kb` | else: `decimal_to_millipercent` → `calculate_test_ram_kb_milli`) → **[if multi-node `--numa-node 0,1,...`: `run_multi_node` dispatches parallel `run_single_node_test` per node → per-node PASS/FAIL → overall verdict]** → `get_core_count` → (if `--numa-node N`: `get_node_core_count`, error on CPU-less nodes) → (if `--threads T`: override core_count, warn if T > node cores) → (if `--pin`: `get_physical_cpu_list` → populate `CPU_LIST`) → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection, NUMA/pin info) → (adaptive calibration: `get_l3_cache_kb` → `run_calibration` → `estimate_duration` → `print_estimate`) → (EDAC before) → Phase 1: `run_all_memtesters` (with per-thread `taskset`/`numactl` wrapping) → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest` with `taskset`/`numactl` wrapping) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
 
 ### Test Infrastructure
 

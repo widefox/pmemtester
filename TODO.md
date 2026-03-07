@@ -30,20 +30,19 @@ Considerations:
 - `ulimit -l` memory locking behavior may differ across platforms
 - EDAC_GHES (firmware-first) may be the only EDAC path on some ARM64 servers
 
-## 3. NUMA Locality (partially complete)
+## 3. NUMA Locality (complete)
 
-Single-node NUMA support is implemented (v0.7):
+Implemented in v0.7:
 
 - [x] `--numa-node N` flag constrains testing to a specific NUMA node via `numactl --cpunodebind=N --membind=N`
 - [x] Auto-detects node core count and adjusts thread count accordingly
 - [x] CPU-less NUMA nodes (e.g., HBM) error with a message suggesting manual `numactl --membind=N` workaround
 - [x] Integrates with `--threads` (warns if T > node cores) and `--pin` (filters CPUs to node)
 - [x] Wraps both memtester instances and stressapptest
-
-Remaining:
-
-- Support multiple NUMA nodes: `--numa-node 1,2,3` to test several nodes sequentially (or in parallel across borrowed CPU cores). Use case: Grace Blackwell HBM spans multiple CPU-less NUMA nodes; testing all HBM in one command avoids manual repetition. See [FAQ.md](FAQ.md#how-do-i-test-hbm-or-other-memory-on-cpu-less-numa-nodes) for the current manual workflow.
-- Consider adding a `--per-node` mode that tests each NUMA node sequentially and reports per-node results
+- [x] Multi-node support: `--numa-node 0,1,2` tests multiple nodes in parallel
+- [x] Per-node results printed individually, followed by overall verdict
+- [x] CPU-less nodes automatically borrow CPUs from a donor node
+- [x] EDAC captured as single snapshot with warning that attribution to individual nodes is not possible
 
 ## 4. Heterogeneous Cores
 

@@ -139,6 +139,64 @@ get_physical_cpu_list() {
     '
 }
 
+# parse_numa_nodes: parse comma-separated node string to space-separated, deduplicated list
+# Usage: parse_numa_nodes "0,1,2" -> "0 1 2"
+parse_numa_nodes() {
+    local input="$1"
+    # Replace commas with spaces, trim whitespace, deduplicate
+    echo "$input" | tr ',' ' ' | tr -s ' ' | awk '{
+        for (i = 1; i <= NF; i++) {
+            gsub(/[[:space:]]/, "", $i)
+            if ($i != "" && !seen[$i]++) printf "%s%s", (c++ > 0 ? " " : ""), $i
+        }
+        if (c > 0) printf "\n"
+    }'
+}
+
+# find_donor_node: find the first NUMA node that has CPUs
+# Iterates sysfs node directories and returns the first with physical cores.
+# Usage: find_donor_node
+find_donor_node() {
+    local node_dir
+    for node_dir in "${SYS_NODE_BASE}"/node*; do
+        [[ -d "$node_dir" ]] || continue
+        local node_num="${node_dir##*node}"
+        local count
+        count="$(get_node_core_count "$node_num" 2>/dev/null)" || continue
+        if [[ "$count" -gt 0 ]]; then
+            echo "$node_num"
+            return 0
+        fi
+    done
+    echo "ERROR: no NUMA node with CPUs found" >&2
+    return 1
+}
+
+# resolve_node_cpus: determine CPU source for a NUMA node
+# For nodes with CPUs, returns "own:<node> <core_count> <cpu_list>"
+# For CPU-less nodes, borrows from donor and returns "donor:<donor_node> <core_count> <cpu_list>"
+# Usage: resolve_node_cpus <node>
+resolve_node_cpus() {
+    local node="$1"
+    local core_count
+    core_count="$(get_node_core_count "$node" 2>/dev/null)" || core_count=0
+    if [[ "$core_count" -gt 0 ]]; then
+        local cpu_list
+        cpu_list="$(get_physical_cpu_list "$node")"
+        echo "own:${node} ${core_count} ${cpu_list}"
+        return 0
+    fi
+    # CPU-less node: find donor
+    local donor
+    donor="$(find_donor_node)" || return 1
+    local donor_cores
+    donor_cores="$(get_node_core_count "$donor")" || return 1
+    local donor_cpus
+    donor_cpus="$(get_physical_cpu_list "$donor")"
+    echo "donor:${donor} ${donor_cores} ${donor_cpus}"
+    return 0
+}
+
 # get_node_core_count: return number of physical cores on a specific NUMA node
 # Usage: get_node_core_count <node>
 get_node_core_count() {

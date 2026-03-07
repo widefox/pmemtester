@@ -749,6 +749,60 @@ setup() {
     assert_output --partial "numactl"
 }
 
+# --- multi-node --numa-node tests ---
+
+@test "parse_args --numa-node 0,1 sets NUMA_NODE" {
+    parse_args --numa-node 0,1
+    [[ "$NUMA_NODE" == "0,1" ]]
+}
+
+@test "parse_args --numa-node 1,2,3 sets NUMA_NODE" {
+    parse_args --numa-node 1,2,3
+    [[ "$NUMA_NODE" == "1,2,3" ]]
+}
+
+@test "validate_args --numa-node 0,1 with valid sysfs passes" {
+    local node_fixture="${BATS_TEST_TMPDIR}/sys_node"
+    mkdir -p "${node_fixture}/node0" "${node_fixture}/node1"
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    printf '#!/bin/sh\ntrue\n' > "${mock_bin}/numactl"
+    chmod +x "${mock_bin}/numactl"
+    PATH="${mock_bin}:${PATH}" \
+    SYS_NODE_BASE="$node_fixture" \
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=0 NUMA_NODE="0,1" PIN=0
+    run validate_args
+    assert_success
+}
+
+@test "validate_args --numa-node 0,99 fails (node 99 does not exist)" {
+    local node_fixture="${BATS_TEST_TMPDIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    printf '#!/bin/sh\ntrue\n' > "${mock_bin}/numactl"
+    chmod +x "${mock_bin}/numactl"
+    PATH="${mock_bin}:${PATH}" \
+    SYS_NODE_BASE="$node_fixture" \
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=0 NUMA_NODE="0,99" PIN=0
+    run validate_args
+    assert_failure
+    assert_output --partial "does not exist"
+}
+
+@test "validate_args --numa-node 0,abc fails (non-numeric)" {
+    PERCENT=90 RAM_TYPE=available ITERATIONS=1 COLOR_MODE=auto \
+    STRESSAPPTEST_MODE=auto STRESSAPPTEST_SECONDS=0 SIZE="" PERCENT_SET=0 \
+    ESTIMATE_MODE=auto STOP_ON_ERROR=0 THREADS=0 NUMA_NODE="0,abc" PIN=0
+    run validate_args
+    assert_failure
+    assert_output --partial "numa-node"
+}
+
 @test "usage includes --numa-node" {
     run usage
     assert_success

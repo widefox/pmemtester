@@ -84,11 +84,14 @@ Number of memtester instances to run (default: auto-detect physical cores
 via lscpu). Warns if N exceeds the logical CPU count.
 .TP
 .BI \-\-numa\-node " N"
-Constrain testing to NUMA node N. Each memtester instance and stressapptest
+Constrain testing to NUMA node N, or comma-separated nodes (e.g., 0,1,2)
+for parallel multi-node testing. Each memtester instance and stressapptest
 are wrapped with \fBnumactl \-\-cpunodebind=N \-\-membind=N\fR. The core
 count is automatically set to the number of physical cores on that node.
-Requires \fBnumactl\fR to be installed. CPU-less NUMA nodes (e.g., HBM)
-produce an error with a workaround suggestion.
+For multi-node, each node runs its own pipeline in parallel with per-node
+results. CPU-less nodes automatically borrow CPUs from a donor node.
+Requires \fBnumactl\fR to be installed. In single-node mode, CPU-less
+NUMA nodes (e.g., HBM) produce an error with a workaround suggestion.
 .TP
 .B \-\-pin
 Pin each memtester instance to a specific physical CPU core using
@@ -144,6 +147,14 @@ Test NUMA node 0 with CPU pinning:
 .nf
 .RS
 sudo pmemtester \-\-numa\-node 0 \-\-pin \-\-percent 90
+.RE
+.fi
+.PP
+Test multiple NUMA nodes in parallel:
+.PP
+.nf
+.RS
+sudo pmemtester \-\-numa\-node 0,1 \-\-percent 90
 .RE
 .fi
 .PP
