@@ -22,6 +22,7 @@ A parallel wrapper for [memtester](https://pyropus.ca./software/memtester/) with
 - `--numa-node N`: constrain testing to a specific NUMA node (CPU and memory binding via numactl)
 - `--pin`: pin each memtester instance to a specific physical CPU core (via taskset) for reproducible results
 - `--check-deps`: verify all dependencies, show versions, paths, and system capabilities
+- `--show-physical`: virtual-to-physical address translation via `/proc/PID/pagemap` for DIMM-level failure correlation (requires root)
 - Per-core logging with aggregated master log
 - Pass/fail verdict combining memtester, stressapptest, and EDAC results
 
@@ -59,6 +60,7 @@ Sources: [memtester source: sizes.h](https://github.com/jnavila/memtester/blob/m
 - `lscpu` (from util-linux; falls back to `nproc` from coreutils)
 - `numactl` (optional: required only for `--numa-node`)
 - `taskset` (from util-linux; required only for `--pin`)
+- `od` (from coreutils; required only for `--show-physical`)
 - EDAC support (optional: gracefully skipped if absent)
 
 Install dependencies from your distribution's package manager or build from source:
@@ -182,6 +184,7 @@ Options:
   --stressapptest-seconds N  stressapptest duration (0 = use memtester time, default: 0)
   --stressapptest-dir DIR  Directory containing stressapptest binary (default: /usr/local/bin)
   --estimate MODE          Time estimate calibration: auto (default), on, off
+  --show-physical          Show virtual-to-physical address mapping (requires root)
   --check-deps             Check dependencies, show versions/paths/system info, then exit
   --version                Show version
   --help                   Show this help message
@@ -423,6 +426,7 @@ lib/
 ├── math_utils.sh                       # Integer arithmetic utilities
 ├── memlock.sh                          # Kernel memory lock management
 ├── memtester_mgmt.sh                   # Find and validate memtester binary
+├── pagemap.sh                          # Virtual-to-physical address translation via /proc/PID/pagemap
 ├── parallel.sh                         # Parallel memtester execution, CPU pinning
 ├── ram_calc.sh                         # RAM allocation calculations
 ├── stressapptest_mgmt.sh               # Find, validate, and run stressapptest
@@ -439,6 +443,7 @@ test/
 │   ├── math_utils.bats
 │   ├── memlock.bats
 │   ├── memtester_mgmt.bats
+│   ├── pagemap.bats
 │   ├── parallel.bats
 │   ├── ram_calc.bats
 │   ├── stressapptest_mgmt.bats
@@ -668,7 +673,7 @@ Status messages with wall-clock timestamps are printed at each phase boundary (s
 
 ## Testing
 
-536 tests (429 unit + 107 integration + 6 smoke).
+589 tests (475 unit + 114 integration + 7 smoke).
 
 ```bash
 make test              # Run all tests (unit + integration)

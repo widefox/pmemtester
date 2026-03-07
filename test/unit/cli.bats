@@ -1149,6 +1149,78 @@ MOCK
     assert_output --partial "Memory lock"
 }
 
+# --- --show-physical flag tests ---
+
+@test "parse_args default SHOW_PHYSICAL is 0" {
+    parse_args
+    [[ "$SHOW_PHYSICAL" == "0" ]]
+}
+
+@test "parse_args --show-physical sets SHOW_PHYSICAL to 1" {
+    parse_args --show-physical
+    [[ "$SHOW_PHYSICAL" == "1" ]]
+}
+
+@test "parse_args --show-physical combined with other flags" {
+    parse_args --percent 80 --show-physical --iterations 3
+    [[ "$SHOW_PHYSICAL" == "1" ]]
+    [[ "$PERCENT" == "80" ]]
+    [[ "$ITERATIONS" == "3" ]]
+}
+
+@test "usage includes --show-physical" {
+    run usage
+    assert_success
+    assert_output --partial "--show-physical"
+}
+
+@test "check_deps shows od in optional section" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc od; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "od"
+}
+
+@test "check_deps shows pagemap readability" {
+    load_lib color.sh
+    load_lib system_detect.sh
+    load_lib edac.sh
+    load_lib memlock.sh
+    load_lib pagemap.sh
+    COLOR_MODE=off
+    color_init
+    local mock_bin="${BATS_TEST_TMPDIR}/mock_bin"
+    mkdir -p "$mock_bin"
+    for cmd in memtester lscpu awk find diff stressapptest numactl taskset dmesg nproc od; do
+        printf '#!/bin/sh\necho "mock"\n' > "${mock_bin}/${cmd}"
+        chmod +x "${mock_bin}/${cmd}"
+    done
+    MEMTESTER_DIR="$mock_bin" \
+    STRESSAPPTEST_DIR="$mock_bin" \
+    PROC_MEMINFO="${BATS_TEST_DIRNAME}/../fixtures/proc_meminfo_normal" \
+    EDAC_BASE="${BATS_TEST_DIRNAME}/../fixtures/edac_counters_zero" \
+    SYS_NODE_BASE="${BATS_TEST_DIRNAME}/../fixtures/sys_node_single" \
+    PATH="${mock_bin}:${PATH}" \
+    run check_deps
+    assert_output --partial "pagemap"
+}
+
 @test "check_deps summary when all required present" {
     load_lib color.sh
     load_lib system_detect.sh

@@ -126,3 +126,129 @@ poll_edac_for_ue() {
         esac
     done
 }
+
+# parse_edac_error_addresses: extract physical addresses from dmesg EDAC error messages
+# Parses "page:0xNNN offset:0xNNN" patterns from EDAC error messages.
+# Outputs "page_hex offset_hex mc_id" lines.
+# Usage: parse_edac_error_addresses <dmesg_output_file>
+parse_edac_error_addresses() {
+    local dmesg_file="$1"
+    [[ -f "$dmesg_file" ]] || return 0
+
+    awk '
+        /EDAC/ && /page:0x/ {
+            mc = ""
+            if (match($0, /EDAC MC([0-9]+)/, m)) {
+                mc = "MC" m[1]
+            } else if (match($0, /MC([0-9]+)/)) {
+                mc = substr($0, RSTART, RLENGTH)
+            }
+            page = ""
+            offset = ""
+            for (i = 1; i <= NF; i++) {
+                if ($i ~ /^page:0x/) {
+                    sub(/^page:/, "", $i)
+                    page = $i
+                }
+                if ($i ~ /^offset:0x/) {
+                    sub(/^offset:/, "", $i)
+                    offset = $i
+                }
+            }
+            if (page != "") {
+                if (offset == "") offset = "0x0"
+                print page, offset, mc
+            }
+        }
+    ' "$dmesg_file"
+}
+
+# format_edac_dimm_topology: list EDAC memory controller topology
+# Walks ${EDAC_BASE}/mc/ tree, reads dimm_label if available.
+# Outputs human-readable MC/csrow/channel listing.
+# Usage: format_edac_dimm_topology
+format_edac_dimm_topology() {
+    local base="${EDAC_BASE}/mc"
+    [[ -d "$base" ]] || return 1
+
+    local mc_dir
+    for mc_dir in "$base"/mc*; do
+        [[ -d "$mc_dir" ]] || continue
+        local mc_name="${mc_dir##*/}"
+        echo "${mc_name}:"
+        local csrow_dir
+        for csrow_dir in "$mc_dir"/csrow*; do
+            [[ -d "$csrow_dir" ]] || continue
+            local csrow_name="${csrow_dir##*/}"
+            local ce_count ue_count
+            ce_count="$(cat "$csrow_dir/ce_count" 2>/dev/null)" || ce_count="?"
+            ue_count="$(cat "$csrow_dir/ue_count" 2>/dev/null)" || ue_count="?"
+            echo "  ${csrow_name}: ce=${ce_count} ue=${ue_count}"
+            # Check for dimm labels
+            local label_file
+            for label_file in "$csrow_dir"/ch*_dimm_label; do
+                [[ -f "$label_file" ]] || continue
+                local ch_name="${label_file##*/}"
+                ch_name="${ch_name%_dimm_label}"
+                local label
+                label="$(cat "$label_file")"
+                echo "    ${ch_name}: ${label}"
+            done
+        done
+    done
+}
+
+# correlate_physical_to_edac: correlate physical address range with EDAC errors
+# Reads a pagemap summary file and an EDAC dmesg file, checks for overlap.
+# Outputs correlation report.
+# Usage: correlate_physical_to_edac <pagemap_file> <edac_msg_file>
+correlate_physical_to_edac() {
+    local pagemap_file="$1" edac_msg_file="$2"
+
+    # Read pagemap min/max from header
+    local header
+    header="$(head -1 "$pagemap_file")"
+    local min_phys max_phys
+    min_phys="$(echo "$header" | sed -n 's/.*min_phys=\([^ ]*\).*/\1/p')"
+    max_phys="$(echo "$header" | sed -n 's/.*max_phys=\([^ ]*\).*/\1/p')"
+
+    if [[ -z "$min_phys" ]] || [[ -z "$max_phys" ]]; then
+        echo "Correlation: pagemap data not available"
+        return 0
+    fi
+
+    local min_dec=$(( 16#${min_phys} ))
+    local max_dec=$(( 16#${max_phys} ))
+
+    # Parse EDAC error addresses
+    local edac_addresses
+    edac_addresses="$(parse_edac_error_addresses "$edac_msg_file")"
+
+    if [[ -z "$edac_addresses" ]]; then
+        echo "Correlation: no EDAC error addresses found in dmesg"
+        return 0
+    fi
+
+    local found_overlap=0
+    local page_hex offset_hex mc_id
+    while read -r page_hex offset_hex mc_id; do
+        [[ -z "$page_hex" ]] && continue
+        # Compute physical address: page * 4096 + offset
+        local page_dec=$(( 16#${page_hex#0x} ))
+        local offset_dec=$(( 16#${offset_hex#0x} ))
+        local error_phys=$(( page_dec * 4096 + offset_dec ))
+        local error_phys_hex
+        printf -v error_phys_hex "%x" "$error_phys"
+
+        if (( error_phys >= min_dec && error_phys <= max_dec )); then
+            echo "MATCH: ${mc_id} error at 0x${error_phys_hex} (page:${page_hex}) overlaps thread physical range 0x${min_phys}-0x${max_phys}"
+            found_overlap=1
+        else
+            echo "INFO: ${mc_id} error at 0x${error_phys_hex} (page:${page_hex}) outside thread range"
+        fi
+    done <<< "$edac_addresses"
+
+    if [[ "$found_overlap" -eq 0 ]]; then
+        echo "Correlation: EDAC errors found but no overlap with thread physical range (no overlap)"
+    fi
+}

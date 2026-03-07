@@ -68,6 +68,22 @@ run_single_node_test() {
     # Phase 1: memtester (use per-node NUMA_NODE and CPU_LIST)
     NUMA_NODE="$effective_numa" CPU_LIST=("${node_cpu_list[@]}")
     run_all_memtesters "$memtester_path" "$size_arg" "$ITERATIONS" "$core_count" "$node_log_dir"
+
+    # Capture pagemap snapshots (--show-physical) — must happen before wait_and_collect
+    if [[ "${SHOW_PHYSICAL:-0}" -eq 1 ]]; then
+        local _pagemap_ready=0
+        for _try in 1 2 3 4 5; do
+            if check_pagemap_readable "${MEMTESTER_PIDS[0]}"; then
+                _pagemap_ready=1
+                break
+            fi
+            sleep 0.2
+        done
+        if [[ "$_pagemap_ready" -eq 1 ]]; then
+            capture_all_pagemaps "$node_log_dir"
+        fi
+    fi
+
     local memtester_result=0
     wait_and_collect "$node_log_dir" "$STOP_ON_ERROR" || memtester_result=1
 
@@ -343,6 +359,26 @@ main() {
     fi
 
     run_all_memtesters "$memtester_path" "$size_arg" "$ITERATIONS" "$core_count" "$log_dir"
+
+    # Capture pagemap snapshots (--show-physical) — must happen before wait_and_collect
+    # Brief wait for processes to start and set up memory mappings
+    if [[ "$SHOW_PHYSICAL" -eq 1 ]]; then
+        local _pagemap_ready=0
+        for _try in 1 2 3 4 5; do
+            if check_pagemap_readable "${MEMTESTER_PIDS[0]}"; then
+                _pagemap_ready=1
+                break
+            fi
+            sleep 0.2
+        done
+        if [[ "$_pagemap_ready" -eq 1 ]]; then
+            print_status "Capturing virtual-to-physical address mappings..." "$log_dir"
+            capture_all_pagemaps "$log_dir"
+        else
+            print_status "WARNING: --show-physical requires root or CAP_SYS_ADMIN (pagemap not readable)" "$log_dir"
+        fi
+    fi
+
     local memtester_result=0
     wait_and_collect "$log_dir" "$STOP_ON_ERROR" || memtester_result=1
 
@@ -429,6 +465,20 @@ main() {
     fi
 
     aggregate_logs "$log_dir" "$core_count"
+
+    # Physical address report (--show-physical)
+    if [[ "$SHOW_PHYSICAL" -eq 1 ]]; then
+        report_physical_mapping "$log_dir" "$core_count"
+        if [[ "$edac_supported" -eq 1 ]] && [[ "$edac_class" != "none" ]]; then
+            local i
+            for (( i = 0; i < core_count; i++ )); do
+                local pm_file="${log_dir}/thread_${i}_pagemap.txt"
+                if [[ -f "$pm_file" ]] && ! grep -q "not_available" "$pm_file"; then
+                    correlate_physical_to_edac "$pm_file" "${log_dir}/edac_messages_after.txt"
+                fi
+            done
+        fi
+    fi
 
     local total_elapsed=$(( SECONDS - run_start_seconds ))
     print_status "Total duration: $(format_duration "$total_elapsed")" "$log_dir"

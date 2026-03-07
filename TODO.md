@@ -78,31 +78,18 @@ memtester's `-p` flag (physical address mode via `/dev/mem`) was evaluated as an
 
 For exhaustive physical RAM testing, use a standalone boot-time tester (MemTest86, MemTest86+) where the tool has exclusive access to the full physical address space before the OS loads.
 
-## 8. Virtual-to-Physical Address Translation for DIMM-Level Failure Correlation
+## 8. Virtual-to-Physical Address Translation for DIMM-Level Failure Correlation (complete)
 
-Use `/proc/<pid>/pagemap` to translate virtual addresses to physical page frame numbers, enabling correlation between memtester failures and specific DIMMs via EDAC physical address reporting.
+Implemented in v0.8 (pending release):
 
-Rationale:
-- memtester operates on virtual addresses and cannot identify which physical DIMM a failure maps to
-- EDAC error reports use physical addresses (memory controller, csrow, channel, page offset)
-- `/proc/<pid>/pagemap` provides a userspace-readable virtual-to-physical translation without requiring `/dev/mem` or any kernel modification
-- Bridging this gap would let pmemtester report "memtester failure at virtual address X = physical address Y = DIMM Z" instead of just "memtester failed on core N"
-
-Approach:
-- After a memtester failure, read `/proc/<pid>/pagemap` for the failing memtester process
-- Each 8-byte pagemap entry contains the physical page frame number (PFN) for a virtual page (bits 0-54)
-- Multiply PFN by page size (4096) to get the physical address
-- Cross-reference the physical address with EDAC sysfs to identify the memory controller, csrow, channel, rank, and bank
-- Report the mapping in the master log and per-thread logs
-
-Considerations:
-- Reading `/proc/<pid>/pagemap` requires `CAP_SYS_ADMIN` or root (restricted since kernel 4.0 to prevent physical address leaks -- KASLR bypass mitigation)
-- The pagemap is only useful while the process is alive and its pages are still mapped; must read before the memtester process exits or its address space is torn down
-- Physical page assignment can change if pages are migrated (transparent hugepages, compaction, NUMA balancing), so the translation is a snapshot, not a guarantee
-- Hugepages (2 MB / 1 GB) shift the PFN interpretation; detect via bit 22 of the pagemap entry (page size flag) or via `/proc/<pid>/smaps`
-- This is a diagnostic enhancement only -- it does not change which memory is tested or how
-- In Bash, reading the binary pagemap format requires `od` or `xxd` plus arithmetic; a C helper or Python script may be more practical
-- Could be gated behind a `--show-physical` flag (off by default, since it requires elevated privileges)
+- [x] `--show-physical` flag captures `/proc/PID/pagemap` snapshots during Phase 1 for each memtester thread
+- [x] Translates virtual pages to physical page frame numbers (PFN) via sampled pagemap reading
+- [x] Reports physical address range per thread in the test output
+- [x] Correlates EDAC error addresses from dmesg with thread physical address ranges
+- [x] `format_edac_dimm_topology()` lists MC/csrow/channel structure with DIMM labels
+- [x] Permission-gated: gracefully warns and continues when pagemap is not readable (requires root or CAP_SYS_ADMIN)
+- [x] `check_deps` shows pagemap readability and `od` availability
+- [x] New `lib/pagemap.sh` with 10 functions; 3 new functions added to `lib/edac.sh`
 
 ## 9. Single Binary: Port to C and Integrate with memtester
 

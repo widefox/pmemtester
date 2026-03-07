@@ -72,6 +72,9 @@ make coverage
 
 # NUMA + pinning combined
 ./pmemtester --numa-node 0 --pin
+
+# Show virtual-to-physical address mapping (requires root)
+./pmemtester --show-physical
 ```
 
 ## Version Bump Checklist
@@ -108,6 +111,7 @@ lib/
 ├── math_utils.sh               # Integer arithmetic (ceiling_div, percentage_of, decimal_to_millipercent)
 ├── memlock.sh                  # Kernel memory lock limit checking and configuration
 ├── memtester_mgmt.sh           # Find and validate memtester binary
+├── pagemap.sh                  # Virtual-to-physical address translation via /proc/PID/pagemap
 ├── parallel.sh                 # Background memtester launch, PID tracking, wait, CPU pinning
 ├── ram_calc.sh                 # RAM allocation math (percentage, millipercent, per-core division)
 ├── stressapptest_mgmt.sh       # Find, validate, and run stressapptest binary
@@ -118,7 +122,7 @@ lib/
 
 ### Main Execution Flow
 
-`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → (if `--size`: `parse_size_to_kb` | else: `decimal_to_millipercent` → `calculate_test_ram_kb_milli`) → **[if multi-node `--numa-node 0,1,...`: `run_multi_node` dispatches parallel `run_single_node_test` per node → per-node PASS/FAIL → overall verdict]** → `get_core_count` → (if `--numa-node N`: `get_node_core_count`, error on CPU-less nodes) → (if `--threads T`: override core_count, warn if T > node cores) → (if `--pin`: `get_physical_cpu_list` → populate `CPU_LIST`) → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection, NUMA/pin info) → (adaptive calibration: `get_l3_cache_kb` → `run_calibration` → `estimate_duration` → `print_estimate`) → (EDAC before) → Phase 1: `run_all_memtesters` (with per-thread `taskset`/`numactl` wrapping) → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest` with `taskset`/`numactl` wrapping) → (EDAC after: final check spanning both phases) → `aggregate_logs` → PASS/FAIL
+`parse_args` → `validate_args` → `color_init` → `find_memtester` → (resolve stressapptest) → (if `--size`: `parse_size_to_kb` | else: `decimal_to_millipercent` → `calculate_test_ram_kb_milli`) → **[if multi-node `--numa-node 0,1,...`: `run_multi_node` dispatches parallel `run_single_node_test` per node → per-node PASS/FAIL → overall verdict]** → `get_core_count` → (if `--numa-node N`: `get_node_core_count`, error on CPU-less nodes) → (if `--threads T`: override core_count, warn if T > node cores) → (if `--pin`: `get_physical_cpu_list` → populate `CPU_LIST`) → `divide_ram_per_core_mb` → `validate_ram_params` → `check_memlock_sufficient` → `init_logs` → (report binary detection, NUMA/pin info) → (adaptive calibration: `get_l3_cache_kb` → `run_calibration` → `estimate_duration` → `print_estimate`) → (EDAC before) → Phase 1: `run_all_memtesters` (with per-thread `taskset`/`numactl` wrapping) → (if `--show-physical`: `capture_all_pagemaps`) → `wait_and_collect` → (EDAC mid: intermediate check) → Phase 2: (conditional `run_stressapptest` with `taskset`/`numactl` wrapping) → (EDAC after: final check spanning both phases) → `aggregate_logs` → (if `--show-physical`: `report_physical_mapping` + `correlate_physical_to_edac`) → PASS/FAIL
 
 ### Test Infrastructure
 
@@ -152,6 +156,7 @@ Default settings must never crash the host:
 - `stressapptest` binary (optional: auto mode silently skips if absent)
 - `numactl` (optional: required only when `--numa-node` is used)
 - `taskset` (from util-linux; optional: required only when `--pin` is used)
+- `od` (from coreutils; optional: required only when `--show-physical` is used)
 - Linux kernel with EDAC support (optional: gracefully skipped if absent)
 - Standard Linux utilities: `lscpu`, `nproc` (fallback), `dmesg`, `awk`, `find`, `diff`
 - Test tools: `bats` (1.13.0+), `kcov` (38+), `shellcheck` (0.10.0+)

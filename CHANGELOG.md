@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+### New features
+
+- **`--show-physical`**: Virtual-to-physical address translation via `/proc/PID/pagemap`. Captures pagemap snapshots during Phase 1 for each memtester thread, reports physical address ranges, and correlates with EDAC error addresses from dmesg to identify suspect DIMMs. Requires root or `CAP_SYS_ADMIN`; gracefully warns and continues when pagemap is not readable.
+
+### New CLI flags
+
+- `--show-physical`: Show virtual-to-physical address mapping (requires root)
+
+### New source files
+
+- `lib/pagemap.sh`: Virtual-to-physical address translation, VMA parsing, pagemap capture orchestration
+
+### New functions
+
+- `check_pagemap_readable()` in `pagemap.sh`: Verify pagemap file exists and is readable
+- `extract_pfn_from_entry()` in `pagemap.sh`: Extract PFN from 16-char hex pagemap entry
+- `pfn_to_phys_addr()` in `pagemap.sh`: Convert PFN to physical address
+- `read_pagemap_entry()` in `pagemap.sh`: Read single pagemap entry for a virtual address
+- `read_pagemap_range()` in `pagemap.sh`: Sample pagemap entries across a VMA range
+- `get_vma_range()` in `pagemap.sh`: Find largest anonymous rw-p mapping in /proc/PID/maps
+- `capture_thread_pagemap()` in `pagemap.sh`: Snapshot pagemap for one memtester thread
+- `capture_all_pagemaps()` in `pagemap.sh`: Iterate MEMTESTER_PIDS and capture each
+- `format_physical_report()` in `pagemap.sh`: Format pagemap data as human-readable report
+- `report_physical_mapping()` in `pagemap.sh`: Print physical mapping report for all threads
+- `parse_edac_error_addresses()` in `edac.sh`: Extract physical addresses from dmesg EDAC error messages
+- `format_edac_dimm_topology()` in `edac.sh`: List EDAC MC/csrow/channel topology with DIMM labels
+- `correlate_physical_to_edac()` in `edac.sh`: Correlate physical address range with EDAC errors
+
+### Tests
+
+589 tests (475 unit + 114 integration + 7 smoke), up from 536 in v0.7.
+
 ## v0.7 (2026-03-06)
 
 ### New features

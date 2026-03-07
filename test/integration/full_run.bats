@@ -1846,3 +1846,146 @@ shift; shift; exec "$@"'
     assert_success
     assert_output --partial "Physical cores"
 }
+
+# --- --show-physical tests ---
+
+# Helper: create a memtester mock that writes synthetic proc fixtures for pagemap
+create_pagemap_memtester_mock() {
+    local mock_dir="$1"
+    cat > "${mock_dir}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+# Create synthetic /proc fixtures for pagemap testing.
+# Write to both $$ (own PID) and $PPID (the run_memtester_instance subshell),
+# since pmemtester checks MEMTESTER_PIDS[] which holds the subshell PID.
+_write_pagemap_fixture() {
+    local dir="$1"
+    mkdir -p "$dir"
+    echo "01000000-01004000 rw-p 00000000 00:00 0" > "$dir/maps"
+    dd if=/dev/zero of="$dir/pagemap" bs=1 count=32800 2>/dev/null
+    printf '\x00\x01\x00\x00\x00\x00\x00\x80' | dd of="$dir/pagemap" bs=1 seek=32768 conv=notrunc 2>/dev/null
+    printf '\x00\x02\x00\x00\x00\x00\x00\x80' | dd of="$dir/pagemap" bs=1 seek=32776 conv=notrunc 2>/dev/null
+    printf '\x00\x03\x00\x00\x00\x00\x00\x80' | dd of="$dir/pagemap" bs=1 seek=32784 conv=notrunc 2>/dev/null
+    printf '\x00\x04\x00\x00\x00\x00\x00\x80' | dd of="$dir/pagemap" bs=1 seek=32792 conv=notrunc 2>/dev/null
+}
+if [[ -n "${PROC_BASE:-}" ]]; then
+    _write_pagemap_fixture "${PROC_BASE}/$$"
+    _write_pagemap_fixture "${PROC_BASE}/$PPID"
+fi
+echo "memtester pass"
+sleep 0.5
+exit 0
+MOCK
+    chmod +x "${mock_dir}/memtester"
+}
+
+@test "full run --show-physical without root prints permission warning" {
+    # PROC_BASE pointing to a directory where no pagemap exists → unreadable
+    export PROC_BASE="${TEST_LOG_DIR}/no_proc"
+    mkdir -p "$PROC_BASE"
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --show-physical --size 4M \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "WARNING"
+    assert_output --partial "root"
+}
+
+@test "full run --show-physical with mock pagemap reports physical addresses" {
+    export PROC_BASE="${TEST_LOG_DIR}/proc"
+    mkdir -p "$PROC_BASE"
+    create_pagemap_memtester_mock "$TEST_MEMTESTER_DIR"
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --show-physical --size 4M \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    assert_output --partial "Physical Address Mapping"
+}
+
+@test "full run --show-physical creates pagemap files in log dir" {
+    export PROC_BASE="${TEST_LOG_DIR}/proc"
+    mkdir -p "$PROC_BASE"
+    create_pagemap_memtester_mock "$TEST_MEMTESTER_DIR"
+    "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --show-physical --size 4M \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF || true
+    # At least thread_0_pagemap.txt should exist
+    [[ -f "${TEST_LOG_DIR}/thread_0_pagemap.txt" ]]
+}
+
+@test "full run --show-physical with failing memtester shows physical mapping" {
+    export PROC_BASE="${TEST_LOG_DIR}/proc"
+    mkdir -p "$PROC_BASE"
+    # Create a failing memtester that still sets up pagemap fixtures
+    cat > "${TEST_MEMTESTER_DIR}/memtester" <<'MOCK'
+#!/usr/bin/env bash
+_write_pagemap_fixture() {
+    local dir="$1"
+    mkdir -p "$dir"
+    echo "01000000-01004000 rw-p 00000000 00:00 0" > "$dir/maps"
+    dd if=/dev/zero of="$dir/pagemap" bs=1 count=32800 2>/dev/null
+    printf '\x00\x01\x00\x00\x00\x00\x00\x80' | dd of="$dir/pagemap" bs=1 seek=32768 conv=notrunc 2>/dev/null
+    printf '\x00\x02\x00\x00\x00\x00\x00\x80' | dd of="$dir/pagemap" bs=1 seek=32776 conv=notrunc 2>/dev/null
+    printf '\x00\x03\x00\x00\x00\x00\x00\x80' | dd of="$dir/pagemap" bs=1 seek=32784 conv=notrunc 2>/dev/null
+    printf '\x00\x04\x00\x00\x00\x00\x00\x80' | dd of="$dir/pagemap" bs=1 seek=32792 conv=notrunc 2>/dev/null
+}
+if [[ -n "${PROC_BASE:-}" ]]; then
+    _write_pagemap_fixture "${PROC_BASE}/$$"
+    _write_pagemap_fixture "${PROC_BASE}/$PPID"
+fi
+echo "FAILURE: stuck address"
+sleep 0.5
+exit 1
+MOCK
+    chmod +x "${TEST_MEMTESTER_DIR}/memtester"
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --show-physical --size 4M \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_failure
+    assert_output --partial "Physical Address Mapping"
+}
+
+@test "full run without --show-physical does not create pagemap files" {
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --size 4M \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+    [[ ! -f "${TEST_LOG_DIR}/thread_0_pagemap.txt" ]]
+}
+
+@test "full run --show-physical combined with --stop-on-error" {
+    export PROC_BASE="${TEST_LOG_DIR}/proc"
+    mkdir -p "$PROC_BASE"
+    create_pagemap_memtester_mock "$TEST_MEMTESTER_DIR"
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --show-physical --stop-on-error --size 4M \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+}
+
+@test "full run --show-physical combined with --numa-node" {
+    local node_fixture="${TEST_LOG_DIR}/sys_node"
+    mkdir -p "${node_fixture}/node0"
+    export SYS_NODE_BASE="$node_fixture"
+    export PROC_BASE="${TEST_LOG_DIR}/proc"
+    mkdir -p "$PROC_BASE"
+    create_pagemap_memtester_mock "$TEST_MEMTESTER_DIR"
+    create_mock numactl 'shift; shift; exec "$@"'
+    run "${PROJECT_ROOT}/pmemtester" \
+        --memtester-dir "$TEST_MEMTESTER_DIR" \
+        --log-dir "$TEST_LOG_DIR" \
+        --show-physical --numa-node 0 --size 4M \
+        $TEST_STRESSAPPTEST_OFF $TEST_ESTIMATE_OFF
+    assert_success
+}

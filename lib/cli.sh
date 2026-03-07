@@ -39,6 +39,8 @@ NUMA_NODE=""
 PIN=0
 # shellcheck disable=SC2034
 CHECK_DEPS=0
+# shellcheck disable=SC2034
+SHOW_PHYSICAL=0
 
 # usage: print help text
 usage() {
@@ -62,6 +64,7 @@ Options:
   --threads N         Number of memtester instances to run (default: auto-detect physical cores)
   --numa-node N       Constrain testing to NUMA node N or comma-separated nodes (requires numactl)
   --pin               Pin each memtester to a specific physical CPU core (uses taskset)
+  --show-physical      Show virtual-to-physical address mapping (requires root)
   --check-deps        Check all dependencies, show versions and paths, then exit
   --version           Show version
   --help              Show this help message
@@ -89,6 +92,7 @@ parse_args() {
             --threads)    THREADS="$2"; shift 2 ;;
             --numa-node)  NUMA_NODE="$2"; shift 2 ;;
             --pin)        PIN=1; shift ;;
+            --show-physical) SHOW_PHYSICAL=1; shift ;;
             --check-deps) CHECK_DEPS=1; shift ;;
             --version)    echo "pmemtester ${pmemtester_version:-unknown}"; exit 0 ;;
             --help)       usage; exit 0 ;;
@@ -277,7 +281,7 @@ check_deps() {
     local stressapptest_path="${STRESSAPPTEST_DIR:-/usr/local/bin}/stressapptest"
     _check_bin "stressapptest" "$stressapptest_path" "optional"
 
-    for cmd in numactl taskset dmesg nproc; do
+    for cmd in numactl taskset dmesg nproc od; do
         _check_cmd "$cmd" "optional"
     done
 
@@ -330,6 +334,14 @@ check_deps() {
     local memlock_raw
     memlock_raw="$(_read_ulimit_l 2>/dev/null)" || memlock_raw="(unknown)"
     printf "  %-16s ulimit -l: %s  [OK]\n" "Memory lock" "$memlock_raw"
+
+    # pagemap readability (--show-physical)
+    local pagemap_self="${PROC_BASE:-/proc}/self/pagemap"
+    if [[ -r "$pagemap_self" ]]; then
+        printf "  %-16s %s\n" "pagemap" "[OK] (readable — --show-physical available)"
+    else
+        printf "  %-16s %s\n" "pagemap" "[NOT READABLE] (--show-physical requires root or CAP_SYS_ADMIN)"
+    fi
 
     echo ""
 

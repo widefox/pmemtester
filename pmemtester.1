@@ -99,6 +99,14 @@ Pin each memtester instance to a specific physical CPU core using
 physical cores to logical CPU IDs (lowest ID per core). Stressapptest
 is also pinned. Eliminates scheduler migration for reproducible results.
 .TP
+.B \-\-show\-physical
+Show virtual-to-physical address mapping for each memtester thread by
+reading \fI/proc/PID/pagemap\fR. Reports the physical address range per
+thread and, when EDAC errors are present, correlates them with memory
+controller error addresses from dmesg. Requires root or
+\fBCAP_SYS_ADMIN\fR (restricted since kernel 4.0). If the pagemap is not
+readable, a warning is printed and testing continues normally.
+.TP
 .B \-\-check\-deps
 Check all required and optional dependencies, display versions, paths,
 and system capabilities, then exit. Returns 0 if all required dependencies
@@ -201,6 +209,9 @@ Used for EDAC message capture.
 .TP
 .B nproc
 Fallback for core count detection if lscpu fails.
+.TP
+.B od
+Binary file reader (from coreutils). Required only for \fB\-\-show\-physical\fR.
 .SH FILES
 .TP
 .I /proc/meminfo
@@ -209,6 +220,10 @@ System memory information.
 .I /sys/devices/system/edac/mc/
 EDAC memory controller sysfs directory. Absent on systems without ECC RAM
 or without an EDAC driver loaded.
+.TP
+.I /proc/PID/pagemap
+Per-process virtual-to-physical page mapping. Used by \fB\-\-show\-physical\fR.
+Requires root or \fBCAP_SYS_ADMIN\fR.
 .TP
 .I /sys/devices/system/node/
 NUMA node sysfs directory.

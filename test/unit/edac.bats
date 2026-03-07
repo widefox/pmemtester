@@ -301,3 +301,107 @@ teardown() {
 
     [[ ! -f "$sentinel" ]]
 }
+
+# --- parse_edac_error_addresses tests ---
+
+@test "parse_edac_error_addresses extracts physical addresses from dmesg" {
+    local dmesg_file="${TEST_DIR}/edac_dmesg.txt"
+    cat > "$dmesg_file" <<'EOF'
+[12345.678] EDAC MC0: 1 CE error on CPU#0Channel#0_DIMM#0 (channel:0 slot:0 page:0x1a2b3 offset:0x0 grain:8 syndrome:0x0)
+[12346.789] EDAC MC0: 1 UE error on CPU#0Channel#1_DIMM#0 (channel:1 slot:0 page:0x2b3c4 offset:0x100 grain:8)
+EOF
+    run parse_edac_error_addresses "$dmesg_file"
+    assert_success
+    # Should extract physical addresses: page*4096+offset
+    assert_output --partial "1a2b3"
+    assert_output --partial "2b3c4"
+}
+
+@test "parse_edac_error_addresses returns empty for clean dmesg" {
+    local dmesg_file="${TEST_DIR}/edac_dmesg.txt"
+    echo "[12345.678] Some other kernel message" > "$dmesg_file"
+    run parse_edac_error_addresses "$dmesg_file"
+    assert_success
+    [[ -z "$output" ]]
+}
+
+@test "parse_edac_error_addresses handles multiple error lines" {
+    local dmesg_file="${TEST_DIR}/edac_dmesg.txt"
+    cat > "$dmesg_file" <<'EOF'
+[100.0] EDAC MC0: 1 CE error (channel:0 slot:0 page:0xaaa offset:0x0 grain:8)
+[200.0] EDAC MC0: 1 CE error (channel:0 slot:0 page:0xbbb offset:0x0 grain:8)
+[300.0] EDAC MC1: 1 UE error (channel:1 slot:0 page:0xccc offset:0x200 grain:8)
+EOF
+    run parse_edac_error_addresses "$dmesg_file"
+    assert_success
+    local line_count
+    line_count="$(echo "$output" | wc -l)"
+    [[ "$line_count" -eq 3 ]]
+}
+
+# --- format_edac_dimm_topology tests ---
+
+@test "format_edac_dimm_topology lists MC/csrow/channel structure" {
+    export EDAC_BASE="${FIXTURE_DIR}/edac_counters_zero"
+    run format_edac_dimm_topology
+    assert_success
+    assert_output --partial "mc0"
+    assert_output --partial "csrow0"
+}
+
+@test "format_edac_dimm_topology reads dimm_label if available" {
+    # Create a fixture with dimm_label
+    local edac_dir="${TEST_DIR}/edac/mc/mc0/csrow0"
+    mkdir -p "$edac_dir"
+    echo "0" > "$edac_dir/ce_count"
+    echo "0" > "$edac_dir/ue_count"
+    echo "DIMM_A1" > "$edac_dir/ch0_dimm_label"
+    export EDAC_BASE="${TEST_DIR}/edac"
+    run format_edac_dimm_topology
+    assert_success
+    assert_output --partial "DIMM_A1"
+}
+
+@test "format_edac_dimm_topology handles missing dimm_label" {
+    export EDAC_BASE="${FIXTURE_DIR}/edac_counters_zero"
+    run format_edac_dimm_topology
+    assert_success
+    # Should still produce output without crashing
+    [[ -n "$output" ]]
+}
+
+# --- correlate_physical_to_edac tests ---
+
+@test "correlate_physical_to_edac matches address to MC with error" {
+    local pagemap_file="${TEST_DIR}/thread_0_pagemap.txt"
+    cat > "$pagemap_file" <<'EOF'
+# min_phys=1a2b3000 max_phys=1a2b4000 pages=2
+01000000:107187:1a2b3000
+01001000:107188:1a2b4000
+EOF
+    local edac_msg_file="${TEST_DIR}/edac_msgs.txt"
+    cat > "$edac_msg_file" <<'EOF'
+[12345.678] EDAC MC0: 1 UE error (channel:0 slot:0 page:0x1a2b3 offset:0x0 grain:8)
+EOF
+    run correlate_physical_to_edac "$pagemap_file" "$edac_msg_file"
+    assert_success
+    assert_output --partial "MC0"
+    assert_output --partial "1a2b3"
+}
+
+@test "correlate_physical_to_edac returns unknown when no match" {
+    local pagemap_file="${TEST_DIR}/thread_0_pagemap.txt"
+    cat > "$pagemap_file" <<'EOF'
+# min_phys=1a2b3000 max_phys=1a2b4000 pages=2
+01000000:107187:1a2b3000
+01001000:107188:1a2b4000
+EOF
+    local edac_msg_file="${TEST_DIR}/edac_msgs.txt"
+    # EDAC error at a completely different address
+    cat > "$edac_msg_file" <<'EOF'
+[12345.678] EDAC MC1: 1 UE error (channel:0 slot:0 page:0xfffff offset:0x0 grain:8)
+EOF
+    run correlate_physical_to_edac "$pagemap_file" "$edac_msg_file"
+    assert_success
+    assert_output --partial "no overlap"
+}
