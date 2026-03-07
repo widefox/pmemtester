@@ -12,7 +12,7 @@
 
 ### New CLI flags
 
-- `--numa-node N`: Constrain testing to NUMA node N (requires `numactl`)
+- `--numa-node N[,M,...]`: Constrain testing to NUMA node(s); comma-separated for multi-node (requires `numactl`)
 - `--pin`: Pin each memtester to a specific physical CPU core (uses `taskset`)
 - `--check-deps`: Check all dependencies, show versions and paths, then exit
 
@@ -26,6 +26,9 @@
 - `resolve_node_cpus()` in `system_detect.sh`: Determine CPU source for a node (own or borrowed from donor)
 - `run_single_node_test()` in `pmemtester`: Run the full test pipeline for a single NUMA node
 - `run_multi_node()` in `pmemtester`: Orchestrate parallel per-node test runs
+- `_check_bin()` in `cli.sh`: Check for a binary at a specific path and print status line
+- `_check_cmd()` in `cli.sh`: Check for a command in PATH and print status line
+- `check_deps()` in `cli.sh`: Full dependency diagnostic report
 
 ### Flag interactions
 
@@ -38,13 +41,19 @@
 | `--threads T --numa-node N` | T threads on node N; warns if T > node's core count |
 | `--threads T --pin` | T threads pinned to first T physical CPUs |
 
+### Tests
+
+536 tests (429 unit + 107 integration + 6 smoke), up from 445 in v0.6.
+
 ### Documentation
 
-- Added `--numa-node` and `--pin` flags to README features, usage, and execution flow
-- Added "NUMA-Aware Testing" and "CPU Pinning" sections to README
+- Added `--numa-node`, `--pin`, and `--check-deps` flags to README features, usage, and execution flow
+- Added "NUMA-Aware Testing", "CPU Pinning", and "Dependency check" sections to README
+- Added example output and FAQ entries for `--numa-node` and `--pin`
+- Added `pmemtester.1` manpage with all flags, examples, and dependencies
 - Updated CLAUDE.md execution flow, dependencies, and source layout descriptions
-- Marked TODO items #3 (NUMA Locality) as partially complete and #5 (Thread Pinning) as complete
-- Updated test counts and fixtures list
+- Marked TODO items #3 (NUMA Locality) as complete and #5 (Thread Pinning) as complete
+- Added multi-node NUMA and `--check-deps` design documents to `docs/plans/`
 
 ## v0.6 (2026-03-02)
 
